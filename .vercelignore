@@ -1,0 +1,5 @@
+# Repo furniture that shouldn't be served from the site's domain.
+# The deployed site is just index.html + support.js.
+README.md
+tools/
+wix/
