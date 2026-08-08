@@ -1,0 +1,68 @@
+# Annie Green — Artist Site
+
+Source for <https://annie-green-artist.vercel.app/> (Vercel project `annie-green-artist`,
+team `leverage-ai-sports`).
+
+## What this is
+
+A single-page immersive artwork gallery. The whole site is two files:
+
+| File | What it is |
+| --- | --- |
+| `index.html` | The entire site — markup, styles, and the gallery component |
+| `support.js` | The `x-dc` client runtime the page boots from (generated; do not hand-edit) |
+
+`index.html` is written in the `x-dc` component format: a `<helmet>` block for
+head content and global styles, a declarative markup body using `ref="{{ … }}"`
+and `onClick="{{ … }}"` bindings, and a `<script type="text/x-dc">` block at the
+end holding the component class.
+
+### Features
+
+- Two view modes, **Sphere** (artworks orbiting in 3D, drag to spin) and **Wall**
+  (flat gallery wall with lighting), toggled from the bottom chrome.
+- A **Collections** menu filtering to one of four collections: Crowned Girls,
+  Angels & Companions, Kind Words, Night Studies.
+- A lightbox with hover-to-zoom, artwork metadata (size, year, edition), and
+  original / print pricing.
+- An animated colour-wash background, particle dust canvases, and an idle spin.
+
+### Wix embedding
+
+The page is built to run standalone *and* inside a Wix site as an iframe. The
+`AGWix` bridge at the top of `index.html` talks to the Wix parent over
+`postMessage`:
+
+- sends `ready`, receives `catalog` — when the parent supplies a catalog, the
+  real Wix products and prices replace the built-in artwork list.
+- sends `addToCart` / `openProduct`, receives `cartResult`.
+
+Standalone (no Wix parent), the page falls back to a generated set of 24
+artworks defined in `index.html`, priced and sized locally.
+
+## Artwork images — not in this repo
+
+The gallery loads its images from `art-web/02.jpg` … `art-web/10.jpg`
+(8 distinct files: `02`–`08` and `10`), resolved as:
+
+```js
+src: (window.AG_ART && window.AG_ART[n]) || ("art-web/" + n + ".jpg")
+```
+
+Those JPEGs exist on the live deployment but are **not** stored here, so this
+repo alone is not a complete deployable copy. Any redeploy has to include an
+`art-web/` directory alongside `index.html`, or define `window.AG_ART` as a map
+of image number to URL before the component boots.
+
+## Provenance
+
+The live site was created by a direct file upload (Vercel deployment
+`source: "drop"`), so it was never connected to a git repository. The files here
+were recovered from the running production deployment.
+
+## Deploying
+
+The project has no git integration — deployments are direct uploads of the file
+tree (`index.html`, `support.js`, and `art-web/`). Connecting the Vercel project
+to this repository would let pushes deploy instead, but the artwork images need
+to be committed first.
