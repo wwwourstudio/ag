@@ -27,8 +27,8 @@
  */
 
 import { productsV3 } from '@wix/stores';
-import { categories } from '@wix/stores';
-import { currentCart } from '@wix/ecom';
+import { categories } from '@wix/categories';
+import { currentCartV2 } from '@wix/ecom';
 import wixLocation from 'wix-location';
 
 const HTML_ID = 'html1';
@@ -38,24 +38,29 @@ const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
    collection worth showing in the menu. */
 const ALL_PRODUCTS = '97859c36-72bd-40f3-846d-3d8c533ea382';
 
+/* The SDK names ids `_id`, but nested references (category refs, for one) come
+   back as `id`. Reading them through an `any` helper keeps the editor's type
+   checker quiet either way.
+   @param {any} o */
+const idOf = (o) => (o ? o._id || o.id : null);
+
 const money = (n) =>
-  typeof n === 'number' && !isNaN(n)
-    ? '$' + n.toLocaleString('en-US')
-    : '';
+  typeof n === 'number' && !isNaN(n) ? '$' + n.toLocaleString('en-US') : '';
 
 const num = (v) => {
   const n = parseFloat(v);
   return isNaN(n) ? 0 : n;
 };
 
-/* Wix stores artwork as multi-megabyte PNGs. Serve a resized JPEG instead or
-   the gallery drags in ~50 MB of images. */
+/* Wix stores the artwork as 2-6 MB PNGs. Serve a resized JPEG instead, or the
+   gallery pulls down ~50 MB of images on load. */
 function webImage(url, px) {
   if (!url) return '';
   if (url.indexOf('/v1/') !== -1) return url;
   return url + '/v1/fit/w_' + px + ',h_' + px + ',q_85/file.jpg';
 }
 
+/** @param {any} variant */
 function choiceOf(variant, optionName) {
   const list = variant.choices || variant.optionChoices || [];
   for (const c of list) {
@@ -65,29 +70,35 @@ function choiceOf(variant, optionName) {
   return null;
 }
 
+/* categoryId -> display name, loaded once per page view. */
 let categoryNames = null;
 async function loadCategoryNames() {
   if (categoryNames) return categoryNames;
   categoryNames = {};
   try {
-    const res = await categories.queryCategories({
-      treeReference: { appNamespace: '@wix/stores' },
-    }).find();
-    for (const c of res.items || []) categoryNames[c._id || c.id] = c.name;
+    /** @type {any} */
+    const res = await categories.queryCategories(
+      {},
+      { treeReference: { appNamespace: '@wix/stores', treeKey: null } }
+    );
+    for (const c of res.categories || res.items || []) {
+      const id = idOf(c);
+      if (id) categoryNames[id] = c.name;
+    }
   } catch (err) {
-    console.error('[AG] could not read categories, collections will be empty:', err);
+    console.error('[AG] could not read categories; collections will be empty:', err);
   }
   return categoryNames;
 }
 
 /* Turn one Wix product into the shape index.html expects. */
+/** @param {any} product */
 function toArtwork(product, names) {
-  const variants =
-    (product.variantsInfo && product.variantsInfo.variants) || [];
+  const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
-  /* Originals: the one visible Original variant is the sellable one. Prints:
-     one per paper finish, keyed by finish name so the gallery can price the
-     finish selector from real variant prices. */
+  /* Originals: one visible Original variant is the sellable one. Prints: one
+     per paper finish, keyed by finish name so the gallery can price the finish
+     selector from real variant prices. */
   let origVariantId = null;
   let origPrice = 0;
   let origInStock = false;
@@ -102,7 +113,7 @@ function toArtwork(product, names) {
 
     if (format === 'Original') {
       if (visible && (!origVariantId || inStock)) {
-        origVariantId = v._id || v.id;
+        origVariantId = idOf(v);
         origPrice = price;
         origInStock = inStock;
       }
@@ -111,7 +122,7 @@ function toArtwork(product, names) {
         price,
         priceText: money(price),
         inStock,
-        variantId: v._id || v.id,
+        variantId: idOf(v),
       };
     }
   }
@@ -121,12 +132,10 @@ function toArtwork(product, names) {
     ? Math.min(...finishes.map((f) => prints[f].price))
     : 0;
 
-  const catIds =
-    (product.directCategoryIdsInfo && product.directCategoryIdsInfo.categoryIds) ||
-    (product.directCategoriesInfo &&
-      (product.directCategoriesInfo.categories || []).map((c) => c._id || c.id)) ||
-    [];
-  const collections = catIds
+  const catRefs =
+    (product.directCategoriesInfo && product.directCategoriesInfo.categories) || [];
+  const collections = catRefs
+    .map(idOf)
     .filter((id) => id && id !== ALL_PRODUCTS)
     .map((id) => names[id])
     .filter(Boolean);
@@ -134,7 +143,7 @@ function toArtwork(product, names) {
   const media = product.media && product.media.main && product.media.main.image;
 
   return {
-    id: product._id || product.id,
+    id: idOf(product),
     slug: product.slug,
     url:
       (product.url && (product.url.url || product.url.relativePath)) ||
@@ -155,20 +164,26 @@ function toArtwork(product, names) {
 async function buildCatalog() {
   const names = await loadCategoryNames();
 
-  /* Search/Query Products does NOT return variant data, so each product has to
-     be fetched individually to get variant ids and per-finish prices. With a
-     catalogue this size that is fine; if it grows past a few dozen, cache the
-     result rather than widening this loop. */
-  const listed = await productsV3
-    .queryProducts()
-    .limit(100)
-    .find();
+  /* queryProducts does NOT return variant data, so each product is fetched
+     individually for its variant ids and per-finish prices. Fine for a
+     catalogue this size; if it grows past a few dozen, cache the result
+     rather than widening this loop. */
+  /** @type {any} */
+  const listed = await productsV3.queryProducts(
+    { cursorPaging: { limit: 100 } },
+    { fields: [] }
+  );
 
   const full = await Promise.all(
-    (listed.items || []).map((p) =>
+    (listed.products || listed.items || []).map((p) =>
       productsV3
-        .getProduct(p._id || p.id, {
-          fields: ['VARIANT_OPTION_CHOICE_NAMES', 'DESCRIPTION', 'URL', 'DIRECT_CATEGORIES_INFO'],
+        .getProduct(idOf(p), {
+          fields: [
+            'VARIANT_OPTION_CHOICE_NAMES',
+            'DESCRIPTION',
+            'URL',
+            'DIRECT_CATEGORIES_INFO',
+          ],
         })
         .catch((err) => {
           console.error('[AG] could not load product', p.name, err);
@@ -179,7 +194,7 @@ async function buildCatalog() {
 
   return full
     .filter(Boolean)
-    .map((r) => toArtwork(r.product || r, names))
+    .map((res) => toArtwork(res, names))
     .filter((a) => a.image);
 }
 
@@ -194,8 +209,10 @@ async function sendCatalog() {
 }
 
 async function addToCart(productId, variantId) {
-  await currentCart.addToCurrentCart({
-    lineItems: [
+  /* Older sites expose this as currentCart.addToCurrentCart({ lineItems })
+     instead — swap the import and this call if the editor flags it. */
+  await currentCartV2.addLineItemsToCurrentCart({
+    catalogItems: [
       {
         quantity: 1,
         catalogReference: {
