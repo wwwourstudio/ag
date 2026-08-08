@@ -55,10 +55,70 @@
         }
         return;
       }
+      /* How many pixels of this frame's bottom edge sit below the browser
+         viewport. On a free Wix site the promo banner pushes the frame down
+         and swallows the bottom bar; the parent measures the overhang and
+         we lift the chrome by that much. Goes to 0 by itself once the
+         banner disappears on premium, so the bar drops back down. */
+      if (m.type === "viewport") {
+        api._parentCut = true;
+        api._applyCut(Number(m.bottomCut) || 0);
+        return;
+      }
       if (m.type !== "catalog") return;
       api.catalog = Array.isArray(m.artworks) ? m.artworks : [];
       W.dispatchEvent(new CustomEvent("agwix:catalog", { detail: api.catalog }));
     });
+    /* --- Keep the bottom bar on screen -----------------------------------
+       On a free Wix site the "created by" banner sits above this frame and
+       pushes its bottom edge below the browser viewport, hiding the
+       Sphere/Wall bar and the Collections menu. IntersectionObserver in an
+       iframe reports intersection against the TOP-LEVEL viewport, so a
+       full-height sentinel tells us exactly how many pixels of our bottom
+       edge are cut off — no cooperation from the Wix page required. When
+       the banner goes away on premium the overhang becomes 0 and the bar
+       settles back down on its own. */
+    api._parentCut = false;
+    function applyCut(px) {
+      var cut = Math.max(0, Math.min(400, Math.round(px)));
+      if (cut === api.bottomCut) return;
+      api.bottomCut = cut;
+      document.documentElement.style.setProperty("--ag-cut", cut + "px");
+    }
+    api._applyCut = applyCut;
+    function watchClipping() {
+      if (!W.IntersectionObserver) return;
+      var probe = document.createElement("div");
+      probe.setAttribute("data-ag-probe", "1");
+      probe.style.cssText = "position:fixed;left:0;top:0;width:1px;height:100%;" +
+                            "pointer-events:none;opacity:0;z-index:-1;";
+      document.body.appendChild(probe);
+      var steps = [];
+      for (var i = 0; i <= 100; i++) steps.push(i / 100);
+      var io = new IntersectionObserver(function (entries) {
+        if (api._parentCut) return;
+        var e = entries[entries.length - 1];
+        var r = e.boundingClientRect, ir = e.intersectionRect;
+        /* Nothing visible at all: leave the last known value alone rather
+           than snapping the bar to a wrong place mid-scroll. */
+        if (!e.isIntersecting || ir.height === 0) return;
+        applyCut(r.bottom - ir.bottom);
+      }, { threshold: steps });
+      io.observe(probe);
+      /* Thresholds only fire on crossings, so nudge it after layout settles
+         and whenever the frame is resized. */
+      var kick = function () { io.unobserve(probe); io.observe(probe); };
+      W.addEventListener("resize", kick);
+      W.addEventListener("orientationchange", kick);
+      setTimeout(kick, 300);
+      setTimeout(kick, 1500);
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", watchClipping);
+    } else {
+      watchClipping();
+    }
+
     W.AGWix = api;
     api.send({ type: "ready" });
     W.addEventListener("load", function () { api.send({ type: "ready" }); });
@@ -140,7 +200,7 @@
   <nav ref="{{ chromeTop }}" style="position: absolute; top: max(14px, env(safe-area-inset-top)); right: clamp(14px, 2.4vw, 26px); z-index: 3000; display: flex; align-items: center; gap: clamp(12px, 1.6vw, 20px); padding: 2px 0; opacity: 0;">
   </nav>
 
-  <div ref="{{ chromeBottom }}" style="position: absolute; left: 0; right: 0; bottom: max(20px, env(safe-area-inset-bottom)); z-index: 3000; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 clamp(18px, 3vw, 34px); opacity: 0;">
+  <div ref="{{ chromeBottom }}" style="position: absolute; left: 0; right: 0; bottom: calc(max(20px, env(safe-area-inset-bottom)) + var(--ag-cut, 0px)); z-index: 3000; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 clamp(18px, 3vw, 34px); opacity: 0; transition: bottom .25s ease;">
     <div>
       <div ref="{{ colMenu }}" onClick="{{ pickCol }}" style="position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%) translateY(10px) scale(.97); opacity: 0; visibility: hidden; transform-origin: 50% 100%; transition: opacity .28s ease, transform .34s cubic-bezier(.2,.85,.25,1), visibility .34s; width: min(300px, 84vw); display: flex; flex-direction: column; border-radius: 20px; background: linear-gradient(160deg, rgba(255,255,255,.82), rgba(255,255,255,.64)); border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(50px) saturate(1.9) brightness(1.06); -webkit-backdrop-filter: blur(50px) saturate(1.9) brightness(1.06); box-shadow: 0 38px 64px -30px rgba(20,23,26,.5), inset 0 1px 0 rgba(255,255,255,.9); overflow: hidden;">
         <sc-for list="{{ collections }}" as="c" hint-placeholder-count="5">
@@ -294,6 +354,371 @@
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;idleSpin&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+/* --- Baked Wix Stores catalog -----------------------------------------
+   Snapshot of the live Annie Green Wix store, used when the gallery runs
+   standalone (no Wix parent frame). Inside the Wix embed the bridge sends
+   the live catalog and this is ignored entirely. Regenerate with
+   tools/gen_catalog.py after changing products in Wix.
+   Images go through Wix media transforms so the browser never downloads
+   the multi-megabyte source PNGs. */
+const AG_CATALOG_FALLBACK = [
+    {
+      "id": "f783b558-a740-488f-9bb8-fa7236795ad7",
+      "slug": "night-study-02",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-02",
+      "image": "https://static.wixstatic.com/media/ee1cab_877fff041cfd49699212736a8b37a0a2~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Night Study 02",
+      "collections": [
+        "Night Studies"
+      ],
+      "description": "Worked in a single sitting under lamplight, edges left raw.",
+      "price": 1550,
+      "priceText": "$1,550",
+      "inStock": true,
+      "printPrice": 245,
+      "prints": {
+        "Matte": {
+          "price": 245,
+          "priceText": "$245",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 270,
+          "priceText": "$270",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 300,
+          "priceText": "$300",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "5b42f4c0-482a-4bf1-a8fb-dd53a55272ce",
+      "slug": "night-study-01",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-01",
+      "image": "https://static.wixstatic.com/media/ee1cab_63ccb5c7f9a04966ae9dc7cdf006f946~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Night Study 01",
+      "collections": [
+        "Night Studies"
+      ],
+      "description": "Deep indigo ground worked after dark, the figures emerging from the splatter.",
+      "price": 2400,
+      "priceText": "$2,400",
+      "inStock": true,
+      "printPrice": 320,
+      "prints": {
+        "Matte": {
+          "price": 320,
+          "priceText": "$320",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 345,
+          "priceText": "$345",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 375,
+          "priceText": "$375",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "f02c87fb-47ea-49e5-9419-6007a6c691d8",
+      "slug": "small-mercies",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/small-mercies",
+      "image": "https://static.wixstatic.com/media/ee1cab_8fbaefc9dc324714a7213f5dcbcd54a9~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Small Mercies",
+      "collections": [
+        "Kind Words"
+      ],
+      "description": "Marker and felt over collage, the lettering left deliberately unfinished.",
+      "price": 1100,
+      "priceText": "$1,100",
+      "inStock": false,
+      "printPrice": 185,
+      "prints": {
+        "Matte": {
+          "price": 185,
+          "priceText": "$185",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 210,
+          "priceText": "$210",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 240,
+          "priceText": "$240",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "d8f43217-047b-42ef-abb7-22f582131b9d",
+      "slug": "be-kind-to-yourself",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/be-kind-to-yourself",
+      "image": "https://static.wixstatic.com/media/ee1cab_6a0e83ef535f4fb5855525ce2f83ce02~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Be Kind to Yourself",
+      "collections": [
+        "Kind Words"
+      ],
+      "description": "A stamped phrase pressed into the lower field, half-swallowed by the wash.",
+      "price": 980,
+      "priceText": "$980",
+      "inStock": true,
+      "printPrice": 175,
+      "prints": {
+        "Matte": {
+          "price": 175,
+          "priceText": "$175",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 200,
+          "priceText": "$200",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 230,
+          "priceText": "$230",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "573bbcc0-55ef-4974-b403-1ed3d042a0ef",
+      "slug": "two-together",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/two-together",
+      "image": "https://static.wixstatic.com/media/ee1cab_6205b669b8a74ee185147b678078fc30~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Two Together",
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "Two figures on a bed of indigo splatter, one turned away, one facing out.",
+      "price": 1950,
+      "priceText": "$1,950",
+      "inStock": true,
+      "printPrice": 265,
+      "prints": {
+        "Matte": {
+          "price": 265,
+          "priceText": "$265",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 290,
+          "priceText": "$290",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 320,
+          "priceText": "$320",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "c058c9c5-312a-4f70-b7e4-4c7d32046100",
+      "slug": "the-keeper",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/the-keeper",
+      "image": "https://static.wixstatic.com/media/ee1cab_4d4525b27f7142eb95ab07949b9d4909~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "The Keeper",
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "Stitched patchwork and marker over a headscarfed figure, holding something unseen.",
+      "price": 1750,
+      "priceText": "$1,750",
+      "inStock": true,
+      "printPrice": 250,
+      "prints": {
+        "Matte": {
+          "price": 250,
+          "priceText": "$250",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 275,
+          "priceText": "$275",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 305,
+          "priceText": "$305",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "cc1ab4d6-1b5a-4590-9056-a90e986d7ee6",
+      "slug": "angel-with-companion",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/angel-with-companion",
+      "image": "https://static.wixstatic.com/media/ee1cab_a9d875bd8f8f42e284e055512552d8c5~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Angel with Companion",
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "A veiled figure and her small keeper, worked on a ground of pressed blue.",
+      "price": 2100,
+      "priceText": "$2,100",
+      "inStock": true,
+      "printPrice": 280,
+      "prints": {
+        "Matte": {
+          "price": 280,
+          "priceText": "$280",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 305,
+          "priceText": "$305",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 335,
+          "priceText": "$335",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "a54d3ae3-e49c-4f94-8b54-a62a42e60f51",
+      "slug": "crowned-girl-04",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-04",
+      "image": "https://static.wixstatic.com/media/ee1cab_058fb98b3fbe4c9d84980e93a79e0c55~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 04",
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Warm reds worked over a printed ground, the crown drawn in a single unbroken line.",
+      "price": 1250,
+      "priceText": "$1,250",
+      "inStock": true,
+      "printPrice": 195,
+      "prints": {
+        "Matte": {
+          "price": 195,
+          "priceText": "$195",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 220,
+          "priceText": "$220",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 250,
+          "priceText": "$250",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "1aa22102-cdb5-42ce-92d8-0d65e8e933d2",
+      "slug": "crowned-girl-03",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-03",
+      "image": "https://static.wixstatic.com/media/ee1cab_7dfa9e7104084c43bb0e178be1942749~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 03",
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Ochre and gold ground, with a small figure held at the centre of the field.",
+      "price": 1650,
+      "priceText": "$1,650",
+      "inStock": false,
+      "printPrice": 240,
+      "prints": {
+        "Matte": {
+          "price": 240,
+          "priceText": "$240",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 265,
+          "priceText": "$265",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 295,
+          "priceText": "$295",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "99fa1741-dfea-4f42-b51a-c2e6ced6ad69",
+      "slug": "crowned-girl-02",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-02",
+      "image": "https://static.wixstatic.com/media/ee1cab_a211aec2eeae40dfa2327a8b084f9c09~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 02",
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "A crowned figure worked in wash and pastel, her collar built from torn paper.",
+      "price": 1400,
+      "priceText": "$1,400",
+      "inStock": true,
+      "printPrice": 260,
+      "prints": {
+        "Matte": {
+          "price": 260,
+          "priceText": "$260",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 285,
+          "priceText": "$285",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 315,
+          "priceText": "$315",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "0ac8e5d9-6768-4f6a-be49-fb2f4b51f442",
+      "slug": "crowned-girl-01",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-01",
+      "image": "https://static.wixstatic.com/media/ee1cab_5d385ee002454981873f4f5eddaa0c05~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 01",
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Pastel, wash and collage built up around a single figure, with a stamped phrase set into the lower field.",
+      "price": 1850,
+      "priceText": "$1,850",
+      "inStock": true,
+      "printPrice": 220,
+      "prints": {
+        "Matte": {
+          "price": 220,
+          "priceText": "$220",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 245,
+          "priceText": "$245",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 275,
+          "priceText": "$275",
+          "inStock": true
+        }
+      }
+    }
+  ];
+
+/* Preferred order for the Collections menu, by slugified collection name. */
+const AG_COL_ORDER = ["crowned-girls", "angels-companions", "kind-words", "night-studies"];
+
 class Component extends DCLogic {
   state = {
     view: null, lb: -1, col: 0, colOpen: false,
@@ -313,33 +738,39 @@ class Component extends DCLogic {
   /* --- Wix catalog helpers (added) --------------------------------------- */
   catalog() {
     const c = (window.AGWix && window.AGWix.catalog) || null;
-    return (c && c.length) ? c : null;
+    if (c && c.length) return c;
+    return AG_CATALOG_FALLBACK;
+  }
+
+  /* True only when a Wix parent frame actually supplied the catalog. Add to
+     cart needs the parent to talk to; standalone we link to the store page. */
+  liveCatalog() {
+    const c = (window.AGWix && window.AGWix.catalog) || null;
+    return !!(c && c.length);
   }
 
   colKeyOf(label) {
     return String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "works";
   }
 
+  /* Collections the menu offers, derived from whichever catalog is in play.
+     Anything not named in AG_COL_ORDER keeps its catalog order after the
+     known ones, so a new Wix category still shows up without a code change. */
   collectionData() {
-    const cat = this.catalog();
-    if (!cat) {
-      return [
-        { key: "all", label: "View all" },
-        { key: "crowned", label: "Crowned Girls" },
-        { key: "angels", label: "Angels & Companions" },
-        { key: "words", label: "Kind Words" },
-        { key: "night", label: "Night Studies" }
-      ];
-    }
     if (this._cols) return this._cols;
     const seen = {}, list = [];
-    cat.forEach(p => {
+    (this.catalog() || []).forEach(p => {
       const labels = (p.collections && p.collections.length) ? p.collections : [];
       labels.forEach(label => {
         const key = this.colKeyOf(label);
         if (!seen[key]) { seen[key] = 1; list.push({ key, label }); }
       });
     });
+    const rank = c => {
+      const k = AG_COL_ORDER.indexOf(c.key);
+      return k < 0 ? AG_COL_ORDER.length : k;
+    };
+    list.sort((a, b) => rank(a) - rank(b));
     this._cols = [{ key: "all", label: "View all" }].concat(list);
     return this._cols;
   }
@@ -434,68 +865,37 @@ class Component extends DCLogic {
   workData() {
     if (this._works) return this._works;
 
-    /* --- Wix Stores catalog path (added) --------------------------------- */
-    const cat = this.catalog();
-    if (cat) {
-      this._works = cat.map((p, i) => {
-        const cols = (p.collections && p.collections.length) ? p.collections : ["Works"];
-        return {
-          i,
-          src: p.image || (p.images && p.images[0]) || "",
-          images: p.images || [],
-          title: p.title || "Untitled",
-          collection: cols[0],
-          colKey: this.colKeyOf(cols[0]),
-          colKeys: cols.map(c => this.colKeyOf(c)),
-          excerpt: p.description || "",
-          size: p.size || "",
-          year: p.year || "",
-          price: typeof p.price === "number" ? p.price : 0,
-          priceText: p.priceText || "",
-          sold: p.inStock === false,
-          print: typeof p.printPrice === "number" ? p.printPrice : 0,
-          edition: typeof p.edition === "number" ? p.edition : 0,
-          left: typeof p.left === "number" ? p.left : 0,
-          id: p.id, slug: p.slug, url: p.url
-        };
-      });
-      return this._works;
-    }
-
-    const plan = [
-      { key: "crowned", label: "Crowned Girls", name: "Crowned Girl", srcs: ["02", "05", "08", "03", "06", "10"] },
-      { key: "angels", label: "Angels & Companions", name: "Companion", srcs: ["04", "07", "02", "06", "03", "08"] },
-      { key: "words", label: "Kind Words", name: "Kind Word", srcs: ["05", "10", "07", "04", "03", "02"] },
-      { key: "night", label: "Night Studies", name: "Night Study", srcs: ["10", "06", "04", "08", "07", "05"] }
-    ];
-    const sizes = ["12 × 16 in", "16 × 20 in", "18 × 24 in", "24 × 30 in"];
-    const notes = {
-      crowned: "A figure drawn first in graphite, then crowned and buried under pastel and wash until only the eyes hold still.",
-      angels: "Two forms sharing one ground — cut paper, ink and dry pigment layered until the pair reads as a single shape.",
-      words: "Built around a phrase stamped by hand into the lower field, so the words arrive only once you stand close.",
-      night: "Worked wet on a dark ground, then lifted back with a dry brush until the light comes from inside the paper."
-    };
-    const out = [];
-    plan.forEach((c, ci) => {
-      c.srcs.forEach((n, k) => {
-        const i = out.length;
-        const size = sizes[(ci + k) % 4];
-        const base = 1400 + ((ci * 2 + k) % 7) * 300;
-        const print = [180, 220, 260, 320][(ci + k) % 4];
-        const sold = i === 4 || i === 15;
-        out.push({
-          i, src: (window.AG_ART && window.AG_ART[n]) || ("art-web/" + n + ".jpg"),
-          title: c.name + " " + String(k + 1).padStart(2, "0"),
-          collection: c.label, colKey: c.key,
-          excerpt: notes[c.key] || "",
-          size, year: 2023 + ((ci + k) % 3),
-          price: base, sold,
-          print, edition: 50, left: 50 - ((i * 7) % 34)
-        });
-      });
+    /* Single source of truth: the live Wix catalog when embedded, the baked
+       snapshot otherwise. Both arrive in the same shape. */
+    const cat = this.catalog() || [];
+    this._works = cat.map((p, i) => {
+      const cols = (p.collections && p.collections.length) ? p.collections : ["Works"];
+      return {
+        i,
+        src: p.image || (p.images && p.images[0]) || "",
+        images: p.images || [],
+        title: p.title || "Untitled",
+        collection: cols[0],
+        colKey: this.colKeyOf(cols[0]),
+        colKeys: cols.map(c => this.colKeyOf(c)),
+        excerpt: p.description || "",
+        size: p.size || "",
+        year: p.year || "",
+        price: typeof p.price === "number" ? p.price : 0,
+        priceText: p.priceText || "",
+        sold: p.inStock === false,
+        print: typeof p.printPrice === "number" ? p.printPrice : 0,
+        edition: typeof p.edition === "number" ? p.edition : 0,
+        left: typeof p.left === "number" ? p.left : 0,
+        /* Carried through so the print card can price real paper finishes
+           and Add to cart can name a variant. Dropping these is what made
+           the print card vanish and every add to cart report Unavailable. */
+        prints: p.prints || null,
+        origVariantId: p.origVariantId || null,
+        id: p.id, slug: p.slug, url: p.url
+      };
     });
-    this._works = out;
-    return out;
+    return this._works;
   }
 
   visible() {
@@ -509,6 +909,10 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this.rotY = 0; this.rotX = 0; this.velY = 0; this.velX = 0;
+    /* Vertical drag walks every artwork along the sphere's spiral instead of
+       just tilting it, so dragging up/down is guaranteed to bring each piece
+       through the front of the sphere. One full unit == one complete pass. */
+    this.spin = 0; this.spinVel = 0;
     this.pan = 0; this.panVel = 0;
     this.wS = this.view === "sphere" ? 1 : 0;
     this.wW = this.view === "gallery" ? 1 : 0;
@@ -540,8 +944,9 @@ class Component extends DCLogic {
       if (this.view === "gallery") { this.walked = true; this.panVel += (e.deltaY + e.deltaX) * 0.55; }
       else {
         const dx = e.deltaX || 0, dy = e.deltaY || 0;
-        if (e.shiftKey) this.velX += dy * 0.00014;
-        else { this.velY += dy * 0.00016; this.velX += dx * 0.00014; }
+        /* Wheel drives the same spiral as a vertical drag. */
+        this.spinVel += dy / Math.max(360, window.innerHeight) * 0.05;
+        this.velY += dx * 0.00014;
       }
     };
     window.addEventListener("wheel", this.onWheel, { passive: false });
@@ -556,7 +961,13 @@ class Component extends DCLogic {
       this.drag.x = e.clientX; this.drag.y = e.clientY;
       this.drag.moved += Math.abs(dx) + Math.abs(dy);
       if (this.view === "gallery") { this.walked = true; this.panVel -= dx * 1.6; }
-      else { this.velY -= dx * 0.00026; this.velX -= dy * 0.00022; }
+      else {
+        this.velY -= dx * 0.00026;
+        /* Up/down advances the spiral rather than tilting, so a new piece
+           always rotates into view. Scaled by height so the gesture feels
+           the same on a phone as on a desktop. */
+        this.spinVel -= dy / Math.max(360, window.innerHeight) * 0.055;
+      }
     };
     this.onUp = () => { if (this.stageEl) this.stageEl.style.cursor = "grab"; setTimeout(() => { this.drag = null; }, 0); };
     this.onLeave = () => {
@@ -759,44 +1170,56 @@ class Component extends DCLogic {
     if (this.lbPrintLeftEl) this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
     this.syncPrint();
 
-    /* --- Wix data + add-to-cart (added) ----------------------------------- */
-    if (this.catalog()) {
-      if (this.lbOrigPriceEl && w.priceText) this.lbOrigPriceEl.textContent = w.priceText;
-      if (this.lbSizeEl) this.lbSizeEl.textContent = w.size || "";
-      if (this.lbEditionEl) this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
-
-      const hasPrints = w.prints && Object.keys(w.prints).length;
-      if (this.printCardEl) this.printCardEl.style.display = hasPrints ? "" : "none";
-      if (this.lbPrintPriceEl && hasPrints) {
-        const cp = this.currentPrint();
-        if (cp && cp.priceText) this.lbPrintPriceEl.textContent = cp.priceText;
-      }
-
-      const wire = (el, kind) => {
-        if (!el || el.__agBound) return;
-        el.__agBound = 1;
-        el.addEventListener("click", ev => {
-          ev.preventDefault();
-          const cur = this.workData()[this.state.lb];
-          if (!cur || !window.AGWix) return;
-          let variantId = null;
-          if (kind === "orig") variantId = cur.origVariantId;
-          else { const pr = this.currentPrint(); variantId = pr && pr.variantId; }
-          if (!variantId) {
-            console.error("[gallery] no variantId for", kind, cur.title,
-                          "— origVariantId:", cur.origVariantId,
-                          "prints:", cur.prints);
-            var lbl = el.textContent;
-            el.textContent = "Unavailable";
-            setTimeout(function () { el.textContent = lbl; }, 2500);
-            return;
-          }
-          window.AGWix.addToCart(cur.id, variantId, el.textContent, el);
-        });
-      };
-      wire(this.lbOrigBtnEl, "orig");
-      wire(this.lbPrintBtnEl, "print");
+    /* --- Store data + buy buttons ----------------------------------------- */
+    if (this.lbOrigPriceEl && w.priceText) this.lbOrigPriceEl.textContent = w.priceText;
+    if (this.lbSizeEl) {
+      this.lbSizeEl.textContent = w.size || "";
+      /* Wix carries no per-artwork dimensions, so drop the whole row rather
+         than leave a "Dimensions" label with nothing beside it. */
+      const row = this.lbSizeEl.parentElement;
+      if (row) row.style.display = w.size ? "" : "none";
     }
+    if (this.lbEditionEl) this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
+
+    const hasPrints = w.prints && Object.keys(w.prints).length;
+    if (this.printCardEl) this.printCardEl.style.display = hasPrints ? "" : "none";
+    if (this.lbPrintPriceEl && hasPrints) {
+      const cp = this.currentPrint();
+      if (cp && cp.priceText) this.lbPrintPriceEl.textContent = cp.priceText;
+    }
+
+    const wire = (el, kind) => {
+      if (!el || el.__agBound) return;
+      el.__agBound = 1;
+      el.addEventListener("click", ev => {
+        ev.preventDefault();
+        const cur = this.workData()[this.state.lb];
+        if (!cur || !window.AGWix) return;
+
+        /* Standalone there is no Wix cart to talk to, so send the buyer to
+           the product page instead of leaving the button spinning. */
+        if (!this.liveCatalog()) {
+          window.AGWix.openProduct(cur.slug, cur.url);
+          return;
+        }
+
+        let variantId = null;
+        if (kind === "orig") variantId = cur.origVariantId;
+        else { const pr = this.currentPrint(); variantId = pr && pr.variantId; }
+        if (!variantId) {
+          console.error("[gallery] no variantId for", kind, cur.title,
+                        "— origVariantId:", cur.origVariantId,
+                        "prints:", cur.prints);
+          const lbl = el.textContent;
+          el.textContent = "Unavailable";
+          setTimeout(() => { el.textContent = lbl; }, 2500);
+          return;
+        }
+        window.AGWix.addToCart(cur.id, variantId, el.textContent, el);
+      });
+    };
+    wire(this.lbOrigBtnEl, "orig");
+    wire(this.lbPrintBtnEl, "print");
 
     if (this.lbStripEl) {
       const btns = this.lbStripEl.querySelectorAll("[data-thumb]");
@@ -1061,6 +1484,7 @@ class Component extends DCLogic {
     this.rotY += this.velY; this.rotX += this.velX;
     this.rotX = Math.max(-0.9, Math.min(0.9, this.rotX));
     this.velY *= 0.965; this.velX *= 0.95;
+    this.spin += this.spinVel; this.spinVel *= 0.94;
     const v = this.view;
     if (v === "sphere" && this.props.idleSpin !== false) this.rotY += 0.00018;
     this.pulse = 1;
@@ -1144,9 +1568,20 @@ class Component extends DCLogic {
       }
 
 
-      const yUnit = N > 1 ? (1 - (j / (N - 1)) * 2) * 0.97 : 0;
+      /* Each piece rides a spiral: `u` is its position along it, advanced by
+         this.spin. Latitude wraps at the poles so the ring is endless, while
+         the longitude uses the unwrapped value and so stays continuous —
+         a piece leaving the bottom reappears at the top having kept its
+         place in the spiral. Dragging up/down therefore walks the whole
+         catalogue through the front of the sphere. */
+      const uRaw = N > 1 ? (j / N) + this.spin : 0.5;
+      const u = uRaw - Math.floor(uRaw);
+      const yUnit = N > 1 ? (1 - u * 2) * 0.97 : 0;
       const phi = Math.acos(yUnit);
-      const a = j * GA + this.rotY;
+      const a = uRaw * N * GA + this.rotY;
+      /* Hide the pole-to-pole wrap: fade right at the ends of the spiral,
+         where a piece is smallest and deepest in the vignette anyway. */
+      const poleFade = N > 1 ? Math.min(1, Math.min(u, 1 - u) / 0.06) : 1;
       let sx = R * Math.sin(phi) * Math.cos(a);
       let sy = R * 0.95 * Math.cos(phi);
       let sz = R * Math.sin(phi) * Math.sin(a);
@@ -1195,7 +1630,7 @@ class Component extends DCLogic {
       node.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
         + " perspective(1600px) rotateY(" + tiltY.toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
         + " scale(" + scale.toFixed(3) + ")";
-      const opS = 0.42 + 0.58 * depth;
+      const opS = (0.42 + 0.58 * depth) * poleFade;
       const opG = 1 - off * 0.3;
       node.style.opacity = ((opS * wS + opG * m) * ei).toFixed(3);
       node.style.zIndex = String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
