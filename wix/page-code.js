@@ -297,8 +297,17 @@ async function buildCatalog() {
     { fields: [] }
   );
 
+  const items = listed.products || listed.items || [];
+  if (!items.length) {
+    /* The query resolved and simply had nothing in it — no error to catch. The
+       usual cause is the page code reading the store without permission to see
+       products, which returns an empty page rather than throwing. */
+    console.error('[AG] queryProducts returned no products. Response keys:',
+                  Object.keys(listed || {}), 'pagingMetadata:', listed && listed.pagingMetadata);
+  }
+
   const full = await Promise.all(
-    (listed.products || listed.items || []).map((p) =>
+    items.map((p) =>
       productsV3
         .getProduct(idOf(p), {
           fields: [
@@ -316,39 +325,79 @@ async function buildCatalog() {
     )
   );
 
-  return full
-    .filter(Boolean)
-    .map((res) => toArtwork(res, info, inventory))
-    .filter((a) => a.image);
+  /* Say which stage lost the products. "0 artworks" on its own could be an
+     empty query, every getProduct failing, or every product being dropped for
+     having no image, and those have nothing to do with each other. */
+  const loaded = full.filter(Boolean);
+  const artworks = loaded.map((res) => toArtwork(res, info, inventory)).filter((a) => a.image);
+  console.log('[AG] catalog:', items.length, 'listed,', loaded.length, 'loaded,',
+              artworks.length, 'with images');
+  if (loaded.length && !artworks.length) {
+    console.error('[AG] every product was dropped for having no main image. First one:',
+                  loaded[0] && loaded[0].name, 'media:', loaded[0] && loaded[0].media);
+  }
+  return artworks;
 }
 
 
 async function addToCart(productId, variantId) {
-  /* Older sites expose this as currentCart.addToCurrentCart({ lineItems })
-     instead — swap the import and this call if the editor flags it. */
-  await currentCartV2.addLineItemsToCurrentCart({
-    catalogItems: [
-      {
-        quantity: 1,
-        catalogReference: {
-          catalogItemId: productId,
-          appId: STORES_APP_ID,
-          options: { variantId },
+  try {
+    /* Older sites expose this as currentCart.addToCurrentCart({ lineItems })
+       instead — swap the import and this call if the editor flags it. */
+    await currentCartV2.addLineItemsToCurrentCart({
+      catalogItems: [
+        {
+          quantity: 1,
+          catalogReference: {
+            catalogItemId: productId,
+            appId: STORES_APP_ID,
+            options: { variantId },
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
+  } catch (err) {
+    /* An original is a stock of one. Pressing Buy now for a piece that is
+       already in the cart therefore asks for a second and gets rejected — the
+       buyer sees a hard failure for having done nothing wrong. Tell those two
+       cases apart and let the caller answer each properly. */
+    const kind = inventoryRefusal(err);
+    if (kind === 'already') {
+      await refreshCartUI();
+      openCartPanel();
+      return { already: true };
+    }
+    if (kind === 'soldOut') return { soldOut: true };
+    throw err;
+  }
 
-  /* The SDK writes straight to the cart, which leaves the page's cart UI
-     showing stale data — only refreshCart() makes the cart icon and side cart
-     re-read it. Refresh first, then slide the cart out, so the panel opens
-     already showing the artwork that was just added. */
+  await refreshCartUI();
+  openCartPanel();
+  return {};
+}
+
+/* Which kind of INSUFFICIENT_INVENTORY this is, or null if it's another error.
+ *
+ * We always ask for one. So a refusal that still reports stock available means
+ * the shortfall is the buyer's own cart holding the rest — the piece is in
+ * there already. No stock available is the genuine sell-out. */
+function inventoryRefusal(err) {
+  const appErr = err && err.details && err.details.applicationError;
+  if (!appErr || appErr.code !== 'INSUFFICIENT_INVENTORY') return null;
+  const items = (appErr.data && appErr.data.invalidItems) || [];
+  const available = items.length ? items[0].availableQuantity : 0;
+  return available >= 1 ? 'already' : 'soldOut';
+}
+
+/* The SDK writes straight to the cart, which leaves the page's cart UI showing
+   stale data — only refreshCart() makes the cart icon and side cart re-read it.
+   Refresh before opening the panel, so it opens already showing the artwork. */
+async function refreshCartUI() {
   try {
     await wixEcomFrontend.refreshCart();
   } catch (err) {
     console.error('[AG] could not refresh the cart UI:', err);
   }
-  openCartPanel();
 }
 
 /* Slide the cart out after an add.
@@ -472,8 +521,12 @@ $w.onReady(function () {
 
     if (msg.type === 'addToCart') {
       try {
-        await addToCart(msg.productId, msg.variantId);
-        frame.postMessage({ type: 'cartResult', ok: true });
+        const res = await addToCart(msg.productId, msg.variantId);
+        if (res.soldOut) {
+          frame.postMessage({ type: 'cartResult', ok: false, soldOut: true });
+        } else {
+          frame.postMessage({ type: 'cartResult', ok: true, already: !!res.already });
+        }
       } catch (err) {
         console.error('[AG] add to cart failed:', err);
         frame.postMessage({
