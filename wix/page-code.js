@@ -97,10 +97,13 @@ const CATEGORY_NAMES = {
 };
 
 /* Info sections carry the gallery's metadata — Medium, Size, Year, Edition —
-   as rich text on a shared entity, and products reference them by id. All four
-   are read from the store and editable in Wix: change "16 x 20 in" in the Size
-   section and the lightbox follows. Medium used to be the exception, typed
-   into index.html where editing Wix could never reach it. */
+   as rich text on shared entities that products reference by id. All four are
+   read from the store: change "16 x 20 in" in the Size section and the
+   lightbox follows. Medium used to be the exception, typed into index.html
+   where editing Wix could never reach it.
+
+   Shared is the operative word — see sectionOf for what that means per
+   artwork, and how to give one piece its own values. */
 let infoText = null;
 async function loadInfoSections() {
   if (infoText) return infoText;
@@ -110,7 +113,7 @@ async function loadInfoSections() {
     const res = await infoSectionsV3.queryInfoSections({ cursorPaging: { limit: 100 } });
     for (const sec of res.infoSections || res.items || []) {
       const id = idOf(sec);
-      if (id) infoText[id] = { name: sec.uniqueName, text: richText(sec.description) };
+      if (id) infoText[id] = { name: sec.uniqueName, title: sec.title, text: richText(sec.description) };
     }
   } catch (err) {
     console.error('[AG] could not read info sections:', err);
@@ -163,14 +166,37 @@ function choiceOf(variant, optionName) {
   return null;
 }
 
-/* Pull one named info section's text off a product. */
-/** @param {any} product */
-function sectionOf(product, info, uniqueName) {
+/* Pull one named info section's text off a product.
+ *
+ * Every artwork currently points at the SAME four info sections, so Medium,
+ * Size, Year and Edition are one value for the whole catalogue — editing Size
+ * in Wix changes all eleven pieces at once. That is how the store is set up,
+ * not a limit of this code.
+ *
+ * To give one piece its own Size, add a second info section to just that
+ * product. Unique names have to be unique across the store, so it has to be
+ * called something like `size-night-study-01`, but its *title* can still be
+ * "Size". Hence the three ways of matching below, and hence the preference for
+ * the more specific one: a product carrying both the shared `size` and its own
+ * `size-…` should show its own.
+ *
+ * @param {any} product */
+function sectionOf(product, info, key) {
+  const want = String(key).toLowerCase();
+  let shared = '';
   for (const ref of product.infoSections || []) {
     const hit = info[idOf(ref)];
-    if (hit && hit.name === uniqueName) return hit.text;
+    if (!hit) continue;
+    const name = String(hit.name || '').toLowerCase();
+    const title = String(hit.title || '').toLowerCase();
+    if (name === want || title === want) {
+      if (!shared) shared = hit.text;
+      continue;
+    }
+    /* `size-night-study-01` and the like — this artwork's own. */
+    if (name.split('-')[0] === want) return hit.text;
   }
-  return '';
+  return shared;
 }
 
 /* Remaining edition counts — "37 left" in the lightbox.
@@ -315,7 +341,7 @@ async function buildCatalog() {
   const binfo = {};
   for (const sec of src.infoSections) {
     const id = idOf(sec);
-    if (id) binfo[id] = { name: sec.uniqueName, text: richText(sec.description) };
+    if (id) binfo[id] = { name: sec.uniqueName, title: sec.title, text: richText(sec.description) };
   }
   const binv = {};
   for (const it of src.inventoryItems) {
