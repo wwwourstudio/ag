@@ -24,7 +24,7 @@
  *
  *     iframe -> here : "ready"        ask for the catalog
  *                      "addToCart"    add a variant to the Wix cart, then
- *                                     refresh and slide out the side cart
+ *                                     refresh and slide out the cart lightbox
  *                      "openProduct"  go to the product page
  *     here -> iframe : "catalog"      artworks, prices, metadata, variant ids
  *                      "cartResult"   whether the add succeeded
@@ -41,10 +41,17 @@
 import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
 import wixLocation from 'wix-location';
 import wixEcomFrontend from 'wix-ecom-frontend';
+import wixWindow from 'wix-window';
 import { currentCartV2 } from '@wix/ecom';
 
 const HTML_ID = 'html1';
 const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
+
+/* The cart that slides out on this site is a lightbox, not Wix's built-in side
+   cart, so openSideCart() has nothing to open — this is what to open instead.
+   Give it the id from the editor without the leading '#'. Set it to '' to fall
+   back to openSideCart() alone. */
+const CART_LIGHTBOX = 'lightbox1';
 
 /* The store's "All Products" category — every product is in it, so it is not a
    collection worth showing in the menu. */
@@ -340,6 +347,48 @@ async function addToCart(productId, variantId) {
     await wixEcomFrontend.refreshCart();
   } catch (err) {
     console.error('[AG] could not refresh the cart UI:', err);
+  }
+  openCartPanel();
+}
+
+/* Slide the cart out after an add.
+ *
+ * Which call does that depends on how the cart was built, and this site's is a
+ * lightbox — so try that first and keep openSideCart() as the fallback. A
+ * lightbox can be either a lightbox *page*, opened by name, or a box sitting on
+ * this page, opened by expanding it; both are tried because the id alone
+ * doesn't say which. Whichever works, the item is already in the cart by the
+ * time we get here, so failing to open the panel costs a flourish, not a sale. */
+function openCartPanel() {
+  if (CART_LIGHTBOX) {
+    /* A collapsed box on this page. $w throws for an id it doesn't know, so a
+       lightbox page lands in the catch and moves on. */
+    try {
+      const el = $w('#' + CART_LIGHTBOX);
+      if (el && typeof el.expand === 'function') {
+        el.expand();
+        if (typeof el.show === 'function') el.show();
+        return;
+      }
+    } catch (err) {
+      /* Not an element on this page — it must be a lightbox page. */
+    }
+    /* A lightbox page. openLightbox takes the lightbox's *name*, which is
+       usually the id with a capital first letter, so try both spellings. */
+    const names = [CART_LIGHTBOX, CART_LIGHTBOX.charAt(0).toUpperCase() + CART_LIGHTBOX.slice(1)];
+    for (const name of names) {
+      try {
+        const opening = wixWindow.openLightbox(name);
+        if (opening && typeof opening.catch === 'function') {
+          opening.catch((err) => console.warn('[AG] cart lightbox "' + name + '" failed:', err));
+        }
+        return;
+      } catch (err) {
+        /* Wrong spelling — try the next, then the built-in side cart. */
+      }
+    }
+    console.warn('[AG] could not open cart lightbox "' + CART_LIGHTBOX +
+                 '"; falling back to the built-in side cart');
   }
   try {
     wixEcomFrontend.openSideCart();
