@@ -358,38 +358,65 @@ async function addToCart(productId, variantId) {
  * lightbox can be either a lightbox *page*, opened by name, or a box sitting on
  * this page, opened by expanding it; both are tried because the id alone
  * doesn't say which. Whichever works, the item is already in the cart by the
- * time we get here, so failing to open the panel costs a flourish, not a sale. */
+ * time we get here, so failing to open the panel costs a flourish, not a sale.
+ *
+ * Nothing here is awaited by the caller on purpose — see openLightboxNamed. */
 function openCartPanel() {
-  if (CART_LIGHTBOX) {
-    /* A collapsed box on this page. $w throws for an id it doesn't know, so a
-       lightbox page lands in the catch and moves on. */
-    try {
-      const el = $w('#' + CART_LIGHTBOX);
-      if (el && typeof el.expand === 'function') {
-        el.expand();
-        if (typeof el.show === 'function') el.show();
-        return;
-      }
-    } catch (err) {
-      /* Not an element on this page — it must be a lightbox page. */
+  if (!CART_LIGHTBOX) {
+    openSideCart();
+    return;
+  }
+
+  /* A collapsed box on this page. An id $w doesn't know gives back an empty
+     selector rather than throwing, and that empty selector still answers to
+     expand/show as no-ops — so checking for the methods alone would swallow
+     the whole fallback chain. Only a real element carries a `type`. */
+  try {
+    /** @type {any} */
+    const el = $w('#' + CART_LIGHTBOX);
+    if (el && el.type && typeof el.expand === 'function') {
+      el.expand();
+      if (typeof el.show === 'function') el.show();
+      return;
     }
-    /* A lightbox page. openLightbox takes the lightbox's *name*, which is
-       usually the id with a capital first letter, so try both spellings. */
-    const names = [CART_LIGHTBOX, CART_LIGHTBOX.charAt(0).toUpperCase() + CART_LIGHTBOX.slice(1)];
-    for (const name of names) {
-      try {
-        const opening = wixWindow.openLightbox(name);
-        if (opening && typeof opening.catch === 'function') {
-          opening.catch((err) => console.warn('[AG] cart lightbox "' + name + '" failed:', err));
-        }
-        return;
-      } catch (err) {
-        /* Wrong spelling — try the next, then the built-in side cart. */
-      }
-    }
+  } catch (err) {
+    /* Not an element on this page — it must be a lightbox page. */
+  }
+
+  openLightboxNamed(0);
+}
+
+/* Try the lightbox-page names in turn, falling back to the built-in side cart.
+ *
+ * openLightbox() rejects for a name that doesn't exist, but it only *resolves*
+ * once the lightbox is closed again — so awaiting it would hang until the
+ * shopper dismisses the cart, and the iframe would hit its 6s timeout and bail
+ * to the product page mid-purchase. Hence the callback walk: the rejection
+ * advances to the next candidate, and success is simply left pending. */
+function openLightboxNamed(i) {
+  /* openLightbox takes the lightbox's *name*, which is usually the id with a
+     capital first letter, so try both spellings. */
+  const names = [CART_LIGHTBOX, CART_LIGHTBOX.charAt(0).toUpperCase() + CART_LIGHTBOX.slice(1)];
+  if (i >= names.length) {
     console.warn('[AG] could not open cart lightbox "' + CART_LIGHTBOX +
                  '"; falling back to the built-in side cart');
+    openSideCart();
+    return;
   }
+
+  let opening;
+  try {
+    opening = wixWindow.openLightbox(names[i]);
+  } catch (err) {
+    openLightboxNamed(i + 1);
+    return;
+  }
+  if (opening && typeof opening.catch === 'function') {
+    opening.catch(() => openLightboxNamed(i + 1));
+  }
+}
+
+function openSideCart() {
   try {
     wixEcomFrontend.openSideCart();
   } catch (err) {
