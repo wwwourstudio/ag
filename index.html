@@ -145,6 +145,41 @@
     @keyframes lbIn { from { opacity: 0; transform: perspective(1800px) rotateY(9deg) scale(.94); } to { opacity: 1; transform: perspective(1800px) rotateY(0) scale(1); } }
     @keyframes swapNext { from { opacity: .15; transform: perspective(1800px) translateX(13%) rotateY(-34deg) scale(.91); } to { opacity: 1; transform: none; } }
     @keyframes swapPrev { from { opacity: .15; transform: perspective(1800px) translateX(-13%) rotateY(34deg) scale(.91); } to { opacity: 1; transform: none; } }
+
+    /* --- Lightbox on small screens -------------------------------------
+       The two-column layout needs at least a 300px detail column plus room
+       for the artwork; below roughly 820px the artwork is squeezed to
+       nothing and the detail column overflows. Stack instead: artwork on
+       top at a size worth looking at, details scrolling underneath. */
+    @media (max-width: 820px) {
+      [data-lb-grid] {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto minmax(0, 1fr) !important;
+      }
+      [data-lb-side] {
+        order: 1 !important;
+        border-right: 0 !important;
+        border-top: 1px solid rgba(20,23,26,.08) !important;
+        padding: 20px clamp(18px, 5vw, 28px) 28px !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      [data-lb-view] {
+        order: 0 !important;
+        padding: clamp(44px, 7vh, 64px) 16px 12px !important;
+      }
+      [data-lb-img] {
+        max-width: min(88vw, 520px) !important;
+        max-height: 38vh !important;
+      }
+      /* Full width once the detail column is no longer beside it. */
+      [data-lb-strip] { left: 0 !important; }
+    }
+
+    /* Short landscape phones: give the artwork the height instead. */
+    @media (max-width: 820px) and (max-height: 520px) {
+      [data-lb-img] { max-height: 46vh !important; }
+      [data-lb-view] { padding-top: 28px !important; }
+    }
   </style>
   <template id="__bundler_thumbnail">
     <svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
@@ -230,15 +265,15 @@
     <div style="position: fixed; inset: 0; z-index: 8000; background: #efece6; animation: softIn .32s ease both;">
       <div style="position: absolute; inset: 0; background: radial-gradient(64% 52% at 34% 20%, rgba(255,255,255,.9) 0%, transparent 70%), radial-gradient(46% 42% at 84% 78%, rgba(214,52,132,.1) 0%, transparent 72%);"></div>
 
-      <div style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
-        <div style="position: relative; display: grid; place-items: center; min-width: 0; padding: clamp(58px, 9vh, 96px) clamp(20px, 4vw, 56px) clamp(112px, 16vh, 156px);">
+      <div data-lb-grid="1" style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
+        <div data-lb-view="1" style="position: relative; display: grid; place-items: center; min-width: 0; padding: clamp(58px, 9vh, 96px) clamp(20px, 4vw, 56px) clamp(112px, 16vh, 156px);">
           <div onClick="{{ closeTile }}" title="Click anywhere to close" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
           <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
           <div ref="{{ lbFrame }}" style="position: relative; z-index: 1; animation: lbIn .6s cubic-bezier(.2,.7,.2,1) both;">
             <div style="position: relative; padding: clamp(9px, 1.3vw, 17px); background: linear-gradient(148deg, #2c2d31 0%, #101012 40%, #1d1e21 100%); box-shadow: 0 60px 90px -46px rgba(20,23,26,.55), inset 0 2px 0 rgba(255,255,255,.16), inset 0 -2px 0 rgba(0,0,0,.6), 0 0 0 1px rgba(20,23,26,.1);">
               <div ref="{{ lbZoom }}" onMouseMove="{{ zoomMove }}" onMouseEnter="{{ zoomIn }}" onMouseLeave="{{ zoomOut }}" style="padding: clamp(10px, 1.8vw, 24px); background: #fbfaf8; box-shadow: inset 0 2px 7px rgba(20,23,26,.14); cursor: crosshair;">
                 <div style="position: relative; overflow: hidden;">
-                  <img ref="{{ lbImg }}" alt="Artwork enlarged" style="display: block; max-width: min(50vw, 700px); max-height: 52vh; width: auto; height: auto; transform-origin: 50% 50%; transition: transform .5s cubic-bezier(.2,.8,.2,1);">
+                  <img data-lb-img="1" ref="{{ lbImg }}" alt="Artwork enlarged" style="display: block; max-width: min(50vw, 700px); max-height: 52vh; width: auto; height: auto; transform-origin: 50% 50%; transition: transform .5s cubic-bezier(.2,.8,.2,1);">
                 </div>
               </div>
               <span style="position: absolute; inset: 0; pointer-events: none; background: linear-gradient(116deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.02) 26%, rgba(255,255,255,0) 46%, rgba(255,255,255,0) 68%, rgba(255,255,255,.08) 84%, rgba(255,255,255,.22) 100%);"></span>
@@ -250,7 +285,7 @@
           <button onClick="{{ lbNext }}" aria-label="Next work" style="position: absolute; z-index: 2; top: 50%; right: clamp(10px, 2.4vw, 34px); transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; appearance: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: transparent; color: rgba(20,23,26,.7); cursor: pointer; transition: background .35s ease, color .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);" style-hover="background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); color: #14171a; transform: translateY(-50%) scale(1.1);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5l7 7-7 7"></path></svg></button>
         </div>
 
-        <aside onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) clamp(26px, 4vh, 40px); background: rgba(255,255,255,.55); border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
+        <aside data-lb-side="1" onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) clamp(26px, 4vh, 40px); background: rgba(255,255,255,.55); border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
           <div style="display: flex; align-items: baseline; gap: 12px;">
             <span ref="{{ lbCollection }}" style="font-size: 9px; letter-spacing: .24em; text-transform: uppercase; color: #2ea060;">Crowned Girls</span>
           </div>
@@ -276,7 +311,7 @@
 
           <p ref="{{ lbExcerpt }}" style="margin: 16px 0 0; font-weight: 300; font-size: 13.5px; line-height: 1.7; color: rgba(20,23,26,.62); text-wrap: pretty;">Pastel, wash and collage built up around a single figure, with a stamped phrase set into the lower field.</p>
 
-          <div onMouseEnter="{{ holoOn }}" onMouseLeave="{{ holoOff }}" style="position: relative; margin-top: 20px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid rgba(20,23,26,.14); border-radius: 15px; overflow: hidden; flex: none; isolation: isolate;" style-hover="border-color: rgba(20,23,26,.28);">
+          <div onMouseEnter="{{ holoOn }}" onMouseLeave="{{ holoOff }}" style="position: relative; margin-top: 20px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid rgba(20,23,26,.14); overflow: hidden; flex: none; isolation: isolate;" style-hover="border-color: rgba(20,23,26,.28);">
             <span ref="{{ holoSpin }}" style="position: absolute; inset: -60%; z-index: -2; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); filter: blur(26px) saturate(1.25); opacity: .62; animation: holoSpin 14s linear infinite; transition: opacity .5s ease;"></span>
             <span style="position: absolute; inset: -20%; z-index: -2; background: linear-gradient(115deg, rgba(255,255,255,0) 18%, rgba(255,255,255,.75) 42%, rgba(255,255,255,0) 62%); background-size: 260% 100%; animation: holoSheen 6.5s ease-in-out infinite; opacity: .5;"></span>
             <span ref="{{ holoVeil }}" style="position: absolute; inset: 0; z-index: -1; background: rgba(255,255,255,.62); transition: background .4s ease;"></span>
@@ -288,7 +323,7 @@
             <a ref="{{ lbOrigBtn }}" href="{{ origLink }}" style="display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin-top: 2px; border-radius: 999px; background: #14171a; color: #f5f3ef; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease;" style-hover="background: #2a2d33; color: #fff;">Buy now</a>
           </div>
 
-          <div ref="{{ printCard }}" onClick="{{ pickPrint }}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid rgba(20,23,26,.14); border-radius: 15px;">
+          <div ref="{{ printCard }}" onClick="{{ pickPrint }}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid rgba(20,23,26,.14);">
             <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
               <span style="font-size: 9px; letter-spacing: .26em; text-transform: uppercase; color: rgba(20,23,26,.5);">Limited print</span>
               <span ref="{{ lbEdition }}" style="font-size: 9px; letter-spacing: .22em; text-transform: uppercase; color: rgba(20,23,26,.5);">Edition of 50</span>
@@ -328,7 +363,7 @@
         </aside>
       </div>
 
-      <div ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: 0; z-index: 2; display: flex; gap: 8px; align-items: flex-end; overflow-x: auto; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
+      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: 0; z-index: 2; display: flex; gap: 8px; align-items: flex-end; overflow-x: auto; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
         <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
           <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0;">
             <img data-src="{{ w.src }}" alt="" style="display: block; height: clamp(44px, 7vh, 62px); width: auto; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
@@ -909,10 +944,6 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this.rotY = 0; this.rotX = 0; this.velY = 0; this.velX = 0;
-    /* Vertical drag walks every artwork along the sphere's spiral instead of
-       just tilting it, so dragging up/down is guaranteed to bring each piece
-       through the front of the sphere. One full unit == one complete pass. */
-    this.spin = 0; this.spinVel = 0;
     this.pan = 0; this.panVel = 0;
     this.wS = this.view === "sphere" ? 1 : 0;
     this.wW = this.view === "gallery" ? 1 : 0;
@@ -944,8 +975,8 @@ class Component extends DCLogic {
       if (this.view === "gallery") { this.walked = true; this.panVel += (e.deltaY + e.deltaX) * 0.55; }
       else {
         const dx = e.deltaX || 0, dy = e.deltaY || 0;
-        /* Wheel drives the same spiral as a vertical drag. */
-        this.spinVel += dy / Math.max(360, window.innerHeight) * 0.05;
+        /* Wheel tumbles the sphere the same way a vertical drag does. */
+        this.velX += dy * 0.00016;
         this.velY += dx * 0.00014;
       }
     };
@@ -961,13 +992,7 @@ class Component extends DCLogic {
       this.drag.x = e.clientX; this.drag.y = e.clientY;
       this.drag.moved += Math.abs(dx) + Math.abs(dy);
       if (this.view === "gallery") { this.walked = true; this.panVel -= dx * 1.6; }
-      else {
-        this.velY -= dx * 0.00026;
-        /* Up/down advances the spiral rather than tilting, so a new piece
-           always rotates into view. Scaled by height so the gesture feels
-           the same on a phone as on a desktop. */
-        this.spinVel -= dy / Math.max(360, window.innerHeight) * 0.055;
-      }
+      else { this.velY -= dx * 0.00026; this.velX -= dy * 0.00026; }
     };
     this.onUp = () => { if (this.stageEl) this.stageEl.style.cursor = "grab"; setTimeout(() => { this.drag = null; }, 0); };
     this.onLeave = () => {
@@ -1446,7 +1471,13 @@ class Component extends DCLogic {
     const visPos = this.visPos || {};
     const N = vis.length;
     if (!N) return;
-    const w = el.clientWidth, h = el.clientHeight;
+    const w = el.clientWidth;
+    /* Compose against the part of the frame the visitor can actually see. On a
+       free Wix site the banner pushes our bottom edge past the fold, and
+       centring on the full frame height drops the artwork below the window.
+       AGWix.bottomCut is that overhang, measured against the real viewport. */
+    const cut = (window.AGWix && window.AGWix.bottomCut) || 0;
+    const h = Math.max(240, el.clientHeight - cut);
     const mn = Math.min(w, h), narrow = w < 760;
     const t = (performance.now() - this.t0) / 1000;
     const ease = x => 1 - Math.pow(1 - x, 3);
@@ -1481,10 +1512,17 @@ class Component extends DCLogic {
     const fitS = narrow ? mn / 620 : mn / 840;
     const f = narrow ? 1500 : 1750;
 
-    this.rotY += this.velY; this.rotX += this.velX;
-    this.rotX = Math.max(-0.9, Math.min(0.9, this.rotX));
-    this.velY *= 0.965; this.velX *= 0.95;
-    this.spin += this.spinVel; this.spinVel *= 0.94;
+    /* A vertical drag tumbles the sphere on X, deliberately unclamped — the
+       old ±0.9rad limit meant it only tilted, so pieces near the poles never
+       rotated to the front. Tumbling alone isn't enough either: it holds every
+       piece at a fixed horizontal offset, leaving ones far left or right
+       unable to reach the centre (one of eleven, measured). Precessing the yaw
+       a quarter turn per tumble sweeps those through too, so the whole
+       catalogue is reachable. See tools/test-sphere.mjs. */
+    this.rotX += this.velX;
+    this.rotY += this.velY + this.velX * 0.25;
+    this.rotX %= Math.PI * 2;
+    this.velY *= 0.965; this.velX *= 0.96;
     const v = this.view;
     if (v === "sphere" && this.props.idleSpin !== false) this.rotY += 0.00018;
     this.pulse = 1;
@@ -1568,20 +1606,9 @@ class Component extends DCLogic {
       }
 
 
-      /* Each piece rides a spiral: `u` is its position along it, advanced by
-         this.spin. Latitude wraps at the poles so the ring is endless, while
-         the longitude uses the unwrapped value and so stays continuous —
-         a piece leaving the bottom reappears at the top having kept its
-         place in the spiral. Dragging up/down therefore walks the whole
-         catalogue through the front of the sphere. */
-      const uRaw = N > 1 ? (j / N) + this.spin : 0.5;
-      const u = uRaw - Math.floor(uRaw);
-      const yUnit = N > 1 ? (1 - u * 2) * 0.97 : 0;
+      const yUnit = N > 1 ? (1 - (j / (N - 1)) * 2) * 0.97 : 0;
       const phi = Math.acos(yUnit);
-      const a = uRaw * N * GA + this.rotY;
-      /* Hide the pole-to-pole wrap: fade right at the ends of the spiral,
-         where a piece is smallest and deepest in the vignette anyway. */
-      const poleFade = N > 1 ? Math.min(1, Math.min(u, 1 - u) / 0.06) : 1;
+      const a = j * GA + this.rotY;
       let sx = R * Math.sin(phi) * Math.cos(a);
       let sy = R * 0.95 * Math.cos(phi);
       let sz = R * Math.sin(phi) * Math.sin(a);
@@ -1630,7 +1657,7 @@ class Component extends DCLogic {
       node.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
         + " perspective(1600px) rotateY(" + tiltY.toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
         + " scale(" + scale.toFixed(3) + ")";
-      const opS = (0.42 + 0.58 * depth) * poleFade;
+      const opS = 0.42 + 0.58 * depth;
       const opG = 1 - off * 0.3;
       node.style.opacity = ((opS * wS + opG * m) * ei).toFixed(3);
       node.style.zIndex = String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
