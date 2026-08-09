@@ -44,17 +44,25 @@ import wixEcomFrontend from 'wix-ecom-frontend';
 import wixWindow from 'wix-window';
 import { currentCartV2 } from '@wix/ecom';
 
-/* --- BACKEND CATALOG (opt-in) -----------------------------------------
-   Uncomment this line, and the matching block in buildCatalog(), only after
-   creating backend/artworkCatalog.web.js — an import of a file that isn't
-   there fails the whole page code, not just the catalog.
+/* --- BACKEND CATALOG ---------------------------------------------------
+   CREATE backend/artworkCatalog.web.js BEFORE pasting this file. An import of
+   a file that isn't there fails the whole page code, not just the catalog.
 
-   Do it when the console says `[AG] catalog: 0 listed, ...`: the store read
-   is coming back empty with no error, which is what a permission-restricted
-   read looks like from frontend code, and permissions can only be raised in
-   backend code. Any other shape means the products arrive fine and are lost
-   later, so this won't help. */
-// import { readCatalogSources } from 'backend/artworkCatalog.web';
+   Why it exists: reading the store from here returns an empty page with no
+   error — `[AG] built 0 artworks` — which is what a permission-restricted
+   read looks like from frontend code. Permissions can only be raised in
+   backend code, so the reads happen there and this calls one method. */
+import { readCatalogSources } from 'backend/artworkCatalog.web';
+
+/* --- COLLECTION NAMES (optional) ---------------------------------------
+   Uncomment this line and the marked line in buildCatalog() to have the
+   Collections menu follow the store — renaming, adding or deleting a
+   collection in Wix then shows up on its own.
+
+   Needs BOTH: `@wix/categories` installed (Packages & Apps -> npm) AND
+   backend/artworkCategories.web.js created. Without it the menu still works,
+   reading names from CATEGORY_NAMES below. */
+// import { readCategoryNames } from 'backend/artworkCategories.web';
 
 const HTML_ID = 'html1';
 const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
@@ -71,15 +79,20 @@ const ALL_PRODUCTS = '97859c36-72bd-40f3-846d-3d8c533ea382';
 
 /* Category id -> the name shown in the gallery's Collections menu.
  *
- * This is a lookup table rather than a query because the `@wix/categories`
- * package isn't available in this site's Velo environment — importing it
- * fails the build with "Cannot find module '@wix/categories'". Products only
- * carry category *ids*, so the names have to come from somewhere; hard-coding
- * the four that exist is the honest trade for a catalogue this size.
+ * FALLBACK ONLY. Products carry category *ids*, never names, so the names have
+ * to be looked up — and the only API that does it is `@wix/categories`, which
+ * failed to import here with "Cannot find module '@wix/categories'". That is
+ * an npm package that has to be installed in the editor (Packages & Apps ->
+ * npm), not a missing capability.
  *
- * If you add or rename a collection in Wix, add it here too. Anything missing
- * is logged to the console and the artwork falls back to "Works", so a stale
- * entry shows up as a wrong menu label rather than a silent disappearance.
+ * backend/artworkCategories.web.js reads it and passes the live names through.
+ * With that wired in the Collections menu follows the store: rename a
+ * collection in Wix and the menu renames, add or delete one and it appears or
+ * goes.
+ *
+ * Until then this table stands in. If you add or rename a collection, add it
+ * here too. Anything missing is logged and the artwork falls back to "Works",
+ * so a stale entry shows up as a wrong menu label, not a disappearance.
  */
 const CATEGORY_NAMES = {
   '8e48dec4-59a1-4310-9bc5-ceb5c8bb1bb6': 'Crowned Girls',
@@ -248,7 +261,7 @@ function leftOf(inventory, variantId) {
 
 /* Turn one Wix product into the shape index.html expects. */
 /** @param {any} product */
-function toArtwork(product, info, inventory) {
+function toArtwork(product, info, inventory, names) {
   const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
   /* Originals: one visible Original variant is the sellable one. Prints: one
@@ -294,7 +307,8 @@ function toArtwork(product, info, inventory) {
     .map(idOf)
     .filter((id) => id && id !== ALL_PRODUCTS)
     .map((id) => {
-      const name = CATEGORY_NAMES[id];
+      /* Live names when the backend read supplied them, the table otherwise. */
+      const name = (names && names[id]) || CATEGORY_NAMES[id];
       if (!name) console.warn('[AG] no name for category', id, '- add it to CATEGORY_NAMES');
       return name;
     })
@@ -331,33 +345,61 @@ function toArtwork(product, info, inventory) {
 }
 
 async function buildCatalog() {
-  /* --- BACKEND CATALOG (opt-in) ---------------------------------------
-     Uncomment together with the import at the top of this file. The backend
-     module does the same three reads with elevated permissions and hands back
-     the same raw objects; everything below stays exactly as it is, so the
-     shaping lives in one place either way.
-
-  const src = await readCatalogSources();
-  const binfo = {};
-  for (const sec of src.infoSections) {
-    const id = idOf(sec);
-    if (id) binfo[id] = { name: sec.uniqueName, title: sec.title, text: richText(sec.description) };
+  /* Backend first, direct read as the safety net. The backend module reads the
+     store with elevated permissions, which is what the frontend read appears
+     to lack here — but if that call fails for any reason, falling back to the
+     direct read leaves the site no worse off than before it existed. */
+  try {
+    const artworks = await buildCatalogViaBackend();
+    if (artworks.length) return artworks;
+    console.error('[AG] backend catalog came back empty — trying the direct read');
+  } catch (err) {
+    console.error('[AG] backend catalog failed, trying the direct read:', err);
   }
-  const binv = {};
-  for (const it of src.inventoryItems) {
+  return buildCatalogDirect();
+}
+
+async function buildCatalogViaBackend() {
+  /* The backend does the store reads and hands back the same raw objects, so
+     the shaping is unchanged and lives in one place either way. */
+  const src = await readCatalogSources();
+
+  const info = {};
+  for (const sec of src.infoSections || []) {
+    const id = idOf(sec);
+    if (id) info[id] = { name: sec.uniqueName, title: sec.title, text: richText(sec.description) };
+  }
+
+  const inventory = {};
+  for (const it of src.inventoryItems || []) {
     const vid = it.variantId || (it.variant && idOf(it.variant)) ||
                 (it.productVariant && it.productVariant.variantId) || null;
     if (!vid) continue;
-    binv[vid] = {
+    inventory[vid] = {
       quantity: typeof it.quantity === 'number' ? it.quantity : null,
       tracked: it.trackQuantity !== false,
     };
   }
-  const bart = src.products.map((res) => toArtwork(res, binfo, binv)).filter((a) => a.image);
-  console.log('[AG] catalog (backend):', src.products.length, 'loaded,', bart.length, 'with images');
-  return bart;
-  */
 
+  /* COLLECTION NAMES: uncomment this and the import at the top of the file to
+     have the menu follow the store. Null means fall back to CATEGORY_NAMES. */
+  let names = null;
+  // names = await readCategoryNames();
+
+  const products = src.products || [];
+  const artworks = products
+    .map((res) => toArtwork(res, info, inventory, names))
+    .filter((a) => a.image);
+  console.log('[AG] catalog (backend):', products.length, 'loaded,',
+              artworks.length, 'with images');
+  if (products.length && !artworks.length) {
+    console.error('[AG] every product was dropped for having no main image. First one:',
+                  products[0] && products[0].name, 'media:', products[0] && products[0].media);
+  }
+  return artworks;
+}
+
+async function buildCatalogDirect() {
   const info = await loadInfoSections();
   const inventory = await loadInventory();
 
@@ -375,7 +417,8 @@ async function buildCatalog() {
   if (!items.length) {
     /* The query resolved and simply had nothing in it — no error to catch. The
        usual cause is the page code reading the store without permission to see
-       products, which returns an empty page rather than throwing. */
+       products, which returns an empty page rather than throwing. That is what
+       the backend module exists to get around. */
     console.error('[AG] queryProducts returned no products. Response keys:',
                   Object.keys(listed || {}), 'pagingMetadata:', listed && listed.pagingMetadata);
   }
@@ -404,7 +447,7 @@ async function buildCatalog() {
      having no image, and those have nothing to do with each other. */
   const loaded = full.filter(Boolean);
   const artworks = loaded.map((res) => toArtwork(res, info, inventory)).filter((a) => a.image);
-  console.log('[AG] catalog:', items.length, 'listed,', loaded.length, 'loaded,',
+  console.log('[AG] catalog (direct):', items.length, 'listed,', loaded.length, 'loaded,',
               artworks.length, 'with images');
   if (loaded.length && !artworks.length) {
     console.error('[AG] every product was dropped for having no main image. First one:',

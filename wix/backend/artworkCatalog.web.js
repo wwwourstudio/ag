@@ -25,16 +25,23 @@
  *   problem, so wire it in (see below). Any other shape means the products are
  *   arriving and being lost later, and this file will not help.
  *
- * HOW TO WIRE IT IN
- *   In the Gallery page code, uncomment the two marked blocks: the import at
- *   the top, and the `readCatalogSources()` branch inside buildCatalog(). Both
- *   are labelled "BACKEND CATALOG". Nothing else changes — the page code keeps
- *   doing the shaping, this file only does the reading.
+ * ORDER MATTERS
+ *   Create this file FIRST, then paste the page code. The page code imports it
+ *   by name, and an import of a file that isn't there fails the whole page —
+ *   not just the catalog.
+ *
+ *   The page code calls this first and falls back to its own direct read if
+ *   this throws, so a bad deploy here degrades to today's behaviour rather
+ *   than breaking the gallery.
  *
  * WHAT IT RETURNS
  *   Raw store data, deliberately untransformed: the same objects the page code
  *   already knows how to read. Keeping the shaping in one place means the two
  *   halves cannot drift apart.
+ *
+ *   Collection NAMES are deliberately not here — see artworkCategories.web.js.
+ *   They need an extra npm package, and a package that won't install must not
+ *   be able to take the whole catalog down with it.
  */
 
 import { Permissions, webMethod } from 'wix-web-module';
