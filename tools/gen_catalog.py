@@ -51,15 +51,13 @@ ROWS = [
 ]
 
 
-# Painting size by slug. Wix stores no per-product dimensions, so they live
-# here until they do. Blank hides the Dimensions row rather than showing an
-# empty one. Keep in sync with SIZES in wix/page-code.js.
-SIZES = {
-    "crowned-girl-01": "", "crowned-girl-02": "", "crowned-girl-03": "",
-    "crowned-girl-04": "", "angel-with-companion": "", "the-keeper": "",
-    "two-together": "", "be-kind-to-yourself": "", "small-mercies": "",
-    "night-study-01": "", "night-study-02": "",
-}
+# Metadata from the store's shared info sections (Medium / Size / Year /
+# Edition). These are one value for the whole catalogue in Wix today, so they
+# are the same for every piece here too. The live bridge reads them from Wix
+# directly; this snapshot just needs to agree with it.
+SIZE = "16 x 20 in"
+YEAR = 2024
+EDITION = 50
 
 
 def money(n):
@@ -75,7 +73,9 @@ def build():
             "url": SITE + "/product-page/" + slug,
             "image": CDN + media + TRANSFORM,
             "title": name,
-            "size": SIZES.get(slug, ""),
+            "size": SIZE,
+            "year": YEAR,
+            "edition": EDITION,
             "collections": [collection],
             "description": desc,
             "price": original,

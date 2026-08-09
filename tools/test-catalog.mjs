@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import vm from "node:vm";
 
-const html = fs.readFileSync("../index.html", "utf8");
+const html = fs.readFileSync("/home/user/ag/index.html", "utf8");
 const body = html.match(/<script type="text\/x-dc"[^>]*>([\s\S]*?)<\/script>/)[1];
 
 const ctx = {

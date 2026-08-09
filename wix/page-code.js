@@ -26,7 +26,7 @@
  * cart work; dropping them is what broke the store before.
  */
 
-import { productsV3 } from '@wix/stores';
+import { productsV3, infoSectionsV3 } from '@wix/stores';
 import { currentCartV2 } from '@wix/ecom';
 import wixLocation from 'wix-location';
 
@@ -56,31 +56,40 @@ const CATEGORY_NAMES = {
   'b3c85211-c373-43d3-9fc7-46f5c66d402c': 'Night Studies',
 };
 
-/* Painting size, keyed by product slug.
- *
- * Wix has nowhere to put this today: the products all share one "Size" info
- * section with no per-product value, physicalProperties is empty, and there
- * are no custom fields. So the dimensions have to be listed here until they
- * exist in the store.
- *
- * Fill these in and the Dimensions row appears in the lightbox. Anything left
- * blank hides the row rather than showing an empty one. If you would rather
- * keep them in Wix, add a per-product info section and say so — reading it
- * here instead is a small change.
- */
-const SIZES = {
-  'crowned-girl-01': '',
-  'crowned-girl-02': '',
-  'crowned-girl-03': '',
-  'crowned-girl-04': '',
-  'angel-with-companion': '',
-  'the-keeper': '',
-  'two-together': '',
-  'be-kind-to-yourself': '',
-  'small-mercies': '',
-  'night-study-01': '',
-  'night-study-02': '',
-};
+/* Info sections carry the gallery's metadata — Medium, Size, Year, Edition —
+   as rich text on a shared entity, and products reference them by id. The
+   values are real store data and editable in Wix, so nothing here is
+   hard-coded: change "16 x 20 in" in the Size section and the lightbox
+   follows. */
+let infoText = null;
+async function loadInfoSections() {
+  if (infoText) return infoText;
+  infoText = {};
+  try {
+    /** @type {any} */
+    const res = await infoSectionsV3.queryInfoSections({ cursorPaging: { limit: 100 } });
+    for (const sec of res.infoSections || res.items || []) {
+      const id = idOf(sec);
+      if (id) infoText[id] = { name: sec.uniqueName, text: richText(sec.description) };
+    }
+  } catch (err) {
+    console.error('[AG] could not read info sections:', err);
+  }
+  return infoText;
+}
+
+/* Flatten Wix rich content down to the one line these sections hold. */
+/** @param {any} doc */
+function richText(doc) {
+  const out = [];
+  const walk = (n) => {
+    if (!n) return;
+    if (n.textData && n.textData.text) out.push(n.textData.text);
+    (n.nodes || []).forEach(walk);
+  };
+  (doc && doc.nodes || []).forEach(walk);
+  return out.join('').trim();
+}
 
 /* The SDK names ids `_id`, but nested references (category refs, for one) come
    back as `id`. Reading them through an `any` helper keeps the editor's type
@@ -114,9 +123,19 @@ function choiceOf(variant, optionName) {
   return null;
 }
 
+/* Pull one named info section's text off a product. */
+/** @param {any} product */
+function sectionOf(product, info, uniqueName) {
+  for (const ref of product.infoSections || []) {
+    const hit = info[idOf(ref)];
+    if (hit && hit.name === uniqueName) return hit.text;
+  }
+  return '';
+}
+
 /* Turn one Wix product into the shape index.html expects. */
 /** @param {any} product */
-function toArtwork(product) {
+function toArtwork(product, info) {
   const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
   /* Originals: one visible Original variant is the sellable one. Prints: one
@@ -177,7 +196,9 @@ function toArtwork(product) {
       '/product-page/' + product.slug,
     image: webImage(media && media.url, 1200),
     title: product.name || 'Untitled',
-    size: SIZES[product.slug] || '',
+    size: sectionOf(product, info, 'size'),
+    year: sectionOf(product, info, 'year'),
+    edition: parseInt(sectionOf(product, info, 'edition'), 10) || 0,
     collections: collections.length ? collections : ['Works'],
     description: product.plainDescription || '',
     price: origPrice,
@@ -190,6 +211,8 @@ function toArtwork(product) {
 }
 
 async function buildCatalog() {
+  const info = await loadInfoSections();
+
   /* queryProducts does NOT return variant data, so each product is fetched
      individually for its variant ids and per-finish prices. Fine for a
      catalogue this size; if it grows past a few dozen, cache the result
@@ -209,6 +232,7 @@ async function buildCatalog() {
             'DESCRIPTION',
             'URL',
             'DIRECT_CATEGORIES_INFO',
+            'INFO_SECTION',
           ],
         })
         .catch((err) => {
@@ -220,7 +244,7 @@ async function buildCatalog() {
 
   return full
     .filter(Boolean)
-    .map((res) => toArtwork(res))
+    .map((res) => toArtwork(res, info))
     .filter((a) => a.image);
 }
 
