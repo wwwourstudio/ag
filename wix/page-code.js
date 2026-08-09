@@ -71,15 +71,20 @@ const ALL_PRODUCTS = '97859c36-72bd-40f3-846d-3d8c533ea382';
 
 /* Category id -> the name shown in the gallery's Collections menu.
  *
- * This is a lookup table rather than a query because the `@wix/categories`
- * package isn't available in this site's Velo environment — importing it
- * fails the build with "Cannot find module '@wix/categories'". Products only
- * carry category *ids*, so the names have to come from somewhere; hard-coding
- * the four that exist is the honest trade for a catalogue this size.
+ * FALLBACK ONLY. Products carry category *ids*, never names, so the names have
+ * to be looked up — and the only API that does it is `@wix/categories`, which
+ * failed to import here with "Cannot find module '@wix/categories'". That is
+ * an npm package that has to be installed in the editor (Packages & Apps ->
+ * npm), not a missing capability.
  *
- * If you add or rename a collection in Wix, add it here too. Anything missing
- * is logged to the console and the artwork falls back to "Works", so a stale
- * entry shows up as a wrong menu label rather than a silent disappearance.
+ * backend/artworkCatalog.web.js installs and reads it, and passes the live
+ * names through, so with the backend catalog wired in the Collections menu
+ * follows the store: rename a collection in Wix and the menu renames, add or
+ * delete one and it appears or goes.
+ *
+ * Until then this table stands in. If you add or rename a collection, add it
+ * here too. Anything missing is logged and the artwork falls back to "Works",
+ * so a stale entry shows up as a wrong menu label, not a disappearance.
  */
 const CATEGORY_NAMES = {
   '8e48dec4-59a1-4310-9bc5-ceb5c8bb1bb6': 'Crowned Girls',
@@ -248,7 +253,7 @@ function leftOf(inventory, variantId) {
 
 /* Turn one Wix product into the shape index.html expects. */
 /** @param {any} product */
-function toArtwork(product, info, inventory) {
+function toArtwork(product, info, inventory, names) {
   const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
   /* Originals: one visible Original variant is the sellable one. Prints: one
@@ -294,7 +299,8 @@ function toArtwork(product, info, inventory) {
     .map(idOf)
     .filter((id) => id && id !== ALL_PRODUCTS)
     .map((id) => {
-      const name = CATEGORY_NAMES[id];
+      /* Live names when the backend read supplied them, the table otherwise. */
+      const name = (names && names[id]) || CATEGORY_NAMES[id];
       if (!name) console.warn('[AG] no name for category', id, '- add it to CATEGORY_NAMES');
       return name;
     })
@@ -353,7 +359,7 @@ async function buildCatalog() {
       tracked: it.trackQuantity !== false,
     };
   }
-  const bart = src.products.map((res) => toArtwork(res, binfo, binv)).filter((a) => a.image);
+  const bart = src.products.map((res) => toArtwork(res, binfo, binv, src.categoryNames)).filter((a) => a.image);
   console.log('[AG] catalog (backend):', src.products.length, 'loaded,', bart.length, 'with images');
   return bart;
   */

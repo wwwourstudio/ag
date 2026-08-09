@@ -403,7 +403,7 @@
     </div>
     <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;">
       <div style="display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px; background: linear-gradient(145deg, rgba(255,255,255,.8), rgba(255,255,255,.62)); border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(46px) saturate(1.9) brightness(1.06); -webkit-backdrop-filter: blur(46px) saturate(1.9) brightness(1.06); box-shadow: 0 18px 42px -22px rgba(20,23,26,.5), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.35);">
-      <div style="position: relative;">
+      <div ref="{{ colWrap }}" style="position: relative;">
         <button data-coltrigger="1" onClick="{{ toggleCol }}" style="display: inline-flex; align-items: center; gap: 12px; appearance: none; cursor: pointer; font: inherit; font-size: 9px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; color: rgba(20,23,26,.5); height: 32px; padding: 0 17px; border-radius: 999px; background: transparent; border: 0; white-space: nowrap; transition: background .25s ease, color .25s ease;" style-hover="background: rgba(20,23,26,.06); color: #14171a;">
           <span ref="{{ colLabel }}">Collections</span>
           <span ref="{{ colCaret }}" style="display: inline-flex; color: rgba(20,23,26,.45); transition: transform .3s ease;"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg></span>
@@ -1121,6 +1121,16 @@ class Component extends DCLogic {
     this.vis.forEach((idx, k) => { this.visPos[idx] = k; });
     this.bindAway();
     const cols = this.collectionData();
+    /* "View all" is always there; anything past it is a real collection from
+       the store. With none, the menu would open onto a single row that filters
+       nothing — so drop the control and let the bar close up around Sphere and
+       Wall. Add a collection in Wix and it comes back on its own. */
+    const hasCols = cols.length > 1;
+    if (this.colWrapEl) this.colWrapEl.style.display = hasCols ? "" : "none";
+    if (!hasCols && (this.state.col !== 0 || this.state.colOpen)) {
+      this.setState({ col: 0, colOpen: false });
+      return;
+    }
     if (this.colLabelEl) this.colLabelEl.textContent = (cols[this.state.col] || cols[0]).label;
     if (this.colCaretEl) this.colCaretEl.style.transform = this.state.colOpen ? "rotate(180deg)" : "none";
     if (this.colMenuEl) {
@@ -2105,6 +2115,7 @@ class Component extends DCLogic {
       loaderSub: el => { this.loaderSubEl = el; },
       chromeTop: el => { this.chromeTopEl = el; },
       chromeBottom: el => { this.chromeBottomEl = el; },
+      colWrap: el => { this.colWrapEl = el; this.refresh(); },
       colLabel: el => { this.colLabelEl = el; this.refresh(); },
       colCaret: el => { this.colCaretEl = el; },
       colMenu: el => { this.colMenuEl = el; this.refresh(); },
