@@ -60,6 +60,21 @@ The live site was created by a direct file upload (Vercel deployment
 `source: "drop"`), so it was never connected to a git repository. The files here
 were recovered from the running production deployment.
 
+## Wix side
+
+Two files, and which one they go in matters:
+
+| File here | Goes in Wix |
+| --- | --- |
+| `wix/public-artworkSync.js` | Public & Backend -> **Public** -> `artworkSync.js` |
+| `wix/page-code.js` | the **Gallery page's** code panel |
+
+`$w` and `wix-location` exist only in page code. Putting the catalog logic in
+`data.js` or a Public file alongside `$w` fails the build with
+`Cannot use namespace '$w' as a value`, which is why the two are separate: the
+Public module is pure data (reads the Wix catalog, writes to the Wix cart) and
+the page code does nothing but wire it to the embed.
+
 ## Deploying
 
 The project has no git integration — deployments are direct uploads of the file
