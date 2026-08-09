@@ -355,9 +355,26 @@ async function sendCatalog() {
   try {
     const artworks = await buildCatalog();
     console.log('[AG] sending', artworks.length, 'artworks to the gallery');
+    /* An empty catalog is a failure that doesn't throw: the gallery treats it
+       exactly like silence and falls back to its baked snapshot, so say so
+       here rather than letting it look like a clean run. */
+    if (!artworks.length) {
+      console.error('[AG] built 0 artworks — the gallery will fall back to its baked ' +
+                    'snapshot. Check the store has visible products with a main image.');
+    }
     $w('#' + HTML_ID).postMessage({ type: 'catalog', artworks });
   } catch (err) {
     console.error('[AG] failed to build the catalog:', err);
+    /* Report it to the iframe as well: that console is the one anyone
+       debugging the live site actually has open. */
+    try {
+      $w('#' + HTML_ID).postMessage({
+        type: 'catalogError',
+        error: (err && err.message) || String(err),
+      });
+    } catch (postErr) {
+      console.error('[AG] could not reach the gallery frame either:', postErr);
+    }
   }
 }
 
