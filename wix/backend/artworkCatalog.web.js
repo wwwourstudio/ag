@@ -25,26 +25,28 @@
  *   problem, so wire it in (see below). Any other shape means the products are
  *   arriving and being lost later, and this file will not help.
  *
- * HOW TO WIRE IT IN
- *   In the Gallery page code, uncomment the two marked blocks: the import at
- *   the top, and the `readCatalogSources()` branch inside buildCatalog(). Both
- *   are labelled "BACKEND CATALOG". Nothing else changes — the page code keeps
- *   doing the shaping, this file only does the reading.
+ * ORDER MATTERS
+ *   Create this file FIRST, then paste the page code. The page code imports it
+ *   by name, and an import of a file that isn't there fails the whole page —
+ *   not just the catalog.
+ *
+ *   The page code calls this first and falls back to its own direct read if
+ *   this throws, so a bad deploy here degrades to today's behaviour rather
+ *   than breaking the gallery.
  *
  * WHAT IT RETURNS
  *   Raw store data, deliberately untransformed: the same objects the page code
- *   already knows how to read, plus a category id -> name map. Keeping the
- *   shaping in one place means the two halves cannot drift apart.
+ *   already knows how to read. Keeping the shaping in one place means the two
+ *   halves cannot drift apart.
+ *
+ *   Collection NAMES are deliberately not here — see artworkCategories.web.js.
+ *   They need an extra npm package, and a package that won't install must not
+ *   be able to take the whole catalog down with it.
  */
 
 import { Permissions, webMethod } from 'wix-web-module';
 import { elevate } from 'wix-auth';
 import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
-/* Requires the `@wix/categories` npm package: Wix editor -> Packages & Apps ->
-   npm -> install it. Without it this file won't build. It is what makes the
-   Collections menu follow the store — products carry category *ids* only, and
-   this is the only API that turns those into names. */
-import { categories } from '@wix/categories';
 
 const idOf = (o) => (o ? o._id || o.id : null);
 
@@ -73,27 +75,6 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
     console.error('[AG/backend] could not read inventory:', err);
   }
 
-  /* Collection names, read from the store so the gallery's Collections menu
-     follows it. Rename one in Wix and the menu renames; add or delete one and
-     it appears or goes. Returned as a plain id -> name map. */
-  const categoryNames = {};
-  try {
-    const queryCategories = elevate(categories.queryCategories);
-    const res = await queryCategories({
-      treeReference: { appNamespace: '@wix/stores' },
-      query: { cursorPaging: { limit: 100 } },
-    });
-    for (const cat of res.categories || res.items || []) {
-      const id = idOf(cat);
-      if (id && cat.name) categoryNames[id] = cat.name;
-    }
-    console.log('[AG/backend] read', Object.keys(categoryNames).length, 'collection names');
-  } catch (err) {
-    /* The page code keeps a hard-coded table for exactly this case, so a
-       failure here costs freshness, not the menu. */
-    console.error('[AG/backend] could not read categories:', err);
-  }
-
   const listed = await queryProducts({ cursorPaging: { limit: 100 } }, { fields: [] });
   const items = listed.products || listed.items || [];
   console.log('[AG/backend] queryProducts returned', items.length, 'products');
@@ -119,5 +100,5 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
     )
   ).filter(Boolean);
 
-  return { products, infoSections, inventoryItems, categoryNames };
+  return { products, infoSections, inventoryItems };
 });
