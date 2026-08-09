@@ -320,7 +320,7 @@
               <span ref="{{ lbOrigStatus }}" style="font-size: 9px; letter-spacing: .22em; text-transform: uppercase; color: #2ea060;">Available</span>
             </div>
             <span ref="{{ lbOrigPrice }}" style="font-weight: 200; font-size: clamp(26px, 2.6vw, 34px); line-height: 1; letter-spacing: -.015em; color: #14171a;">$1,850</span>
-            <a ref="{{ lbOrigBtn }}" href="{{ origLink }}" style="display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin-top: 2px; border-radius: 999px; background: #14171a; color: #f5f3ef; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease;" style-hover="background: #2a2d33; color: #fff;">Buy now</a>
+            <a ref="{{ lbOrigBtn }}" href="{{ origLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 46px; padding: 0 18px; margin-top: 2px; border-radius: 999px; background: #14171a; color: #f5f3ef; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease;" style-hover="background: #2a2d33; color: #fff;">Buy now</a>
           </div>
 
           <div ref="{{ printCard }}" onClick="{{ pickPrint }}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid rgba(20,23,26,.14);">
@@ -358,7 +358,7 @@
               <span ref="{{ lbPrintLeft }}" style="font-size: 10px; font-weight: 300; color: rgba(20,23,26,.5);">37 left</span>
             </div>
 
-            <a ref="{{ lbPrintBtn }}" href="{{ printLink }}" style="display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 999px; border: 1px solid #14171a; background: transparent; color: #14171a; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease, color .25s ease;" style-hover="background: #14171a; color: #f5f3ef; border-color: #14171a;">Buy print</a>
+            <a ref="{{ lbPrintBtn }}" href="{{ printLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid #14171a; background: transparent; color: #14171a; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease, color .25s ease;" style-hover="background: #14171a; color: #f5f3ef; border-color: #14171a;">Buy print</a>
           </div>
         </aside>
       </div>
@@ -1212,7 +1212,17 @@ class Component extends DCLogic {
       const row = this.lbSizeEl.parentElement;
       if (row) row.style.display = w.size ? "" : "none";
     }
-    if (this.lbEditionEl) this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
+    /* Wix carries no edition size or remaining count per artwork, so these are
+       usually empty. Hide them rather than leave an empty cell in a
+       space-between row, which drags the labels out of alignment. */
+    if (this.lbEditionEl) {
+      this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
+      this.lbEditionEl.style.display = w.edition ? "" : "none";
+    }
+    if (this.lbPrintLeftEl) {
+      this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
+      this.lbPrintLeftEl.style.display = w.left ? "" : "none";
+    }
 
     const hasPrints = w.prints && Object.keys(w.prints).length;
     if (this.printCardEl) this.printCardEl.style.display = hasPrints ? "" : "none";
