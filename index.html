@@ -65,9 +65,18 @@
              already in the cart can't add a second. That isn't an error \u2014
              the cart has slid open showing it. Say so rather than flashing
              the button back to normal as though nothing happened. */
-          if (m.already) api._flash("Already in cart", "");
-          else api._restore();
-          if (typeof api.onCartAdded === "function") api.onCartAdded();
+          if (m.already) {
+            /* onCartAdded closes the lightbox to uncover the cart, which would
+               wipe this message off the button in the same tick. Let it be
+               read first, then get out of the cart's way. */
+            api._flash("Already in cart", "");
+            setTimeout(function () {
+              if (typeof api.onCartAdded === "function") api.onCartAdded();
+            }, 1300);
+          } else {
+            api._restore();
+            if (typeof api.onCartAdded === "function") api.onCartAdded();
+          }
         } else if (m.soldOut) {
           api._flash("Sold", "#c0392b");
         } else {
@@ -447,7 +456,7 @@
           <div data-lb-specs="1" style="margin-top: 20px; display: flex; flex-direction: column; border-top: 1px solid rgba(20,23,26,.12);">
             <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
               <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Medium</span>
-              <span style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;">Mixed media on paper</span>
+              <span ref="{{ lbMedium }}" style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;">Mixed media on paper</span>
             </div>
             <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
               <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Dimensions</span>
@@ -557,6 +566,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-02",
       "image": "https://static.wixstatic.com/media/11062b_818116e459a94b2a933ec6c6ed9240c3~mv2.jpg/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Night Study 02",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -596,6 +606,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-01",
       "image": "https://static.wixstatic.com/media/ee1cab_63ccb5c7f9a04966ae9dc7cdf006f946~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Night Study 01",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -635,6 +646,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/small-mercies",
       "image": "https://static.wixstatic.com/media/ee1cab_8fbaefc9dc324714a7213f5dcbcd54a9~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Small Mercies",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -674,6 +686,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/be-kind-to-yourself",
       "image": "https://static.wixstatic.com/media/ee1cab_6a0e83ef535f4fb5855525ce2f83ce02~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Be Kind to Yourself",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -713,6 +726,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/two-together",
       "image": "https://static.wixstatic.com/media/ee1cab_6205b669b8a74ee185147b678078fc30~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Two Together",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -752,6 +766,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/the-keeper",
       "image": "https://static.wixstatic.com/media/ee1cab_4d4525b27f7142eb95ab07949b9d4909~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "The Keeper",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -791,6 +806,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/angel-with-companion",
       "image": "https://static.wixstatic.com/media/ee1cab_a9d875bd8f8f42e284e055512552d8c5~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Angel with Companion",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -830,6 +846,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-04",
       "image": "https://static.wixstatic.com/media/ee1cab_058fb98b3fbe4c9d84980e93a79e0c55~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Crowned Girl 04",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -869,6 +886,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-03",
       "image": "https://static.wixstatic.com/media/ee1cab_7dfa9e7104084c43bb0e178be1942749~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Crowned Girl 03",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -908,6 +926,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-02",
       "image": "https://static.wixstatic.com/media/ee1cab_a211aec2eeae40dfa2327a8b084f9c09~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Crowned Girl 02",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -947,6 +966,7 @@ const AG_CATALOG_FALLBACK = [
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-01",
       "image": "https://static.wixstatic.com/media/ee1cab_5d385ee002454981873f4f5eddaa0c05~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Crowned Girl 01",
+      "medium": "Mixed media on paper",
       "size": "16 x 20 in",
       "year": 2024,
       "edition": 50,
@@ -1146,6 +1166,7 @@ class Component extends DCLogic {
         colKey: this.colKeyOf(cols[0]),
         colKeys: cols.map(c => this.colKeyOf(c)),
         excerpt: p.description || "",
+        medium: p.medium || "",
         size: p.size || "",
         year: p.year || "",
         price: typeof p.price === "number" ? p.price : 0,
@@ -1449,12 +1470,17 @@ class Component extends DCLogic {
     if (this.holoSpinEl) this.holoSpinEl.style.opacity = gone ? ".14" : ".62";
     if (this.lbOrigPriceEl) this.lbOrigPriceEl.style.color = gone ? "rgba(20,23,26,.4)" : "#14171a";
     if (this.lbPrintPriceEl) this.lbPrintPriceEl.textContent = "$" + this.printTotal(w).toLocaleString("en-US");
-    if (this.lbEditionEl) this.lbEditionEl.textContent = "Edition of " + w.edition;
-    if (this.lbPrintLeftEl) this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
     this.syncPrint();
 
     /* --- Store data + buy buttons ----------------------------------------- */
     if (this.lbOrigPriceEl && w.priceText) this.lbOrigPriceEl.textContent = w.priceText;
+    /* Medium is a real info section in the store — it used to be typed into
+       the markup, so editing it in Wix changed nothing here. */
+    if (this.lbMediumEl) {
+      const row = this.lbMediumEl.parentElement;
+      if (w.medium) this.lbMediumEl.textContent = w.medium;
+      if (row) row.style.display = w.medium ? "flex" : "none";
+    }
     if (this.lbSizeEl) {
       this.lbSizeEl.textContent = w.size || "";
       /* Wix carries no per-artwork dimensions, so drop the whole row rather
@@ -1462,16 +1488,13 @@ class Component extends DCLogic {
       const row = this.lbSizeEl.parentElement;
       if (row) row.style.display = w.size ? "flex" : "none";
     }
-    /* Wix carries no edition size or remaining count per artwork, so these are
-       usually empty. Hide them rather than leave an empty cell in a
-       space-between row, which drags the labels out of alignment. */
+    /* Edition size comes from the store's shared info section and can be
+       absent. Hide it rather than leave an empty cell in a space-between row,
+       which drags the label out of alignment. The remaining count is handled
+       in syncPrint, since it belongs to the selected finish. */
     if (this.lbEditionEl) {
       this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
       this.lbEditionEl.style.display = w.edition ? "" : "none";
-    }
-    if (this.lbPrintLeftEl) {
-      this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
-      this.lbPrintLeftEl.style.display = w.left ? "" : "none";
     }
 
     const hasPrints = w.prints && Object.keys(w.prints).length;
@@ -1576,6 +1599,14 @@ class Component extends DCLogic {
 
     const w = this.workData()[this.state.lb];
     const cp = this.currentPrint();
+    /* "37 left" counts the finish the buyer has actually selected. It used to
+       print the cheapest finish's stock no matter which chip was active, so
+       picking Metallic showed Matte's remaining count. */
+    if (this.lbPrintLeftEl) {
+      const left = cp && typeof cp.left === "number" ? cp.left : (w && w.left) || 0;
+      this.lbPrintLeftEl.textContent = left ? (left + " left") : "";
+      this.lbPrintLeftEl.style.display = left ? "" : "none";
+    }
     /* Wix formats its own prices; fall back to the local sum only when there
        is no live variant to read. */
     if (this.lbPrintPriceEl && w) {
@@ -2068,6 +2099,7 @@ class Component extends DCLogic {
       markSub: el => { this.markSubEl = el; },
       loaderMark: el => { this.loaderMarkEl = el; },
       loaderLogo: el => { this.loaderLogoEl = el; },
+      lbMedium: el => { this.lbMediumEl = el; },
       loaderText: el => { this.loaderTextEl = el; },
       loaderWord: el => { this.loaderWordEl = el; },
       loaderSub: el => { this.loaderSubEl = el; },

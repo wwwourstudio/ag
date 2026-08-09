@@ -44,6 +44,18 @@ import wixEcomFrontend from 'wix-ecom-frontend';
 import wixWindow from 'wix-window';
 import { currentCartV2 } from '@wix/ecom';
 
+/* --- BACKEND CATALOG (opt-in) -----------------------------------------
+   Uncomment this line, and the matching block in buildCatalog(), only after
+   creating backend/artworkCatalog.web.js — an import of a file that isn't
+   there fails the whole page code, not just the catalog.
+
+   Do it when the console says `[AG] catalog: 0 listed, ...`: the store read
+   is coming back empty with no error, which is what a permission-restricted
+   read looks like from frontend code, and permissions can only be raised in
+   backend code. Any other shape means the products arrive fine and are lost
+   later, so this won't help. */
+// import { readCatalogSources } from 'backend/artworkCatalog.web';
+
 const HTML_ID = 'html1';
 const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
 
@@ -74,13 +86,21 @@ const CATEGORY_NAMES = {
   '49bca492-5965-44fc-ba17-073624eb3659': 'Angels & Companions',
   'dcd8b88c-b308-4348-9d38-091984855f70': 'Kind Words',
   'b3c85211-c373-43d3-9fc7-46f5c66d402c': 'Night Studies',
+  /* The store also holds an older, empty copy of each of these four, left over
+     from when the collections were first set up. No product uses them today,
+     but tagging one would otherwise drop that piece into "Works" with only a
+     console warning to show for it. */
+  '137a6302-bc74-46dd-b0c7-9c81f60a823a': 'Crowned Girls',
+  'd3dd3b54-7dd7-4e41-a624-cdf7c9639b02': 'Angels & Companions',
+  '4bb9bafb-e7a0-4b42-b9e6-464fab1fe0f9': 'Kind Words',
+  'af1b64bc-8560-4068-acaa-1557547be445': 'Night Studies',
 };
 
 /* Info sections carry the gallery's metadata — Medium, Size, Year, Edition —
-   as rich text on a shared entity, and products reference them by id. The
-   values are real store data and editable in Wix, so nothing here is
-   hard-coded: change "16 x 20 in" in the Size section and the lightbox
-   follows. */
+   as rich text on a shared entity, and products reference them by id. All four
+   are read from the store and editable in Wix: change "16 x 20 in" in the Size
+   section and the lightbox follows. Medium used to be the exception, typed
+   into index.html where editing Wix could never reach it. */
 let infoText = null;
 async function loadInfoSections() {
   if (infoText) return infoText;
@@ -264,6 +284,7 @@ function toArtwork(product, info, inventory) {
       '/product-page/' + product.slug,
     image: webImage(media && media.url, 1200),
     title: product.name || 'Untitled',
+    medium: sectionOf(product, info, 'medium'),
     size: sectionOf(product, info, 'size'),
     year: sectionOf(product, info, 'year'),
     edition: parseInt(sectionOf(product, info, 'edition'), 10) || 0,
@@ -284,6 +305,33 @@ function toArtwork(product, info, inventory) {
 }
 
 async function buildCatalog() {
+  /* --- BACKEND CATALOG (opt-in) ---------------------------------------
+     Uncomment together with the import at the top of this file. The backend
+     module does the same three reads with elevated permissions and hands back
+     the same raw objects; everything below stays exactly as it is, so the
+     shaping lives in one place either way.
+
+  const src = await readCatalogSources();
+  const binfo = {};
+  for (const sec of src.infoSections) {
+    const id = idOf(sec);
+    if (id) binfo[id] = { name: sec.uniqueName, text: richText(sec.description) };
+  }
+  const binv = {};
+  for (const it of src.inventoryItems) {
+    const vid = it.variantId || (it.variant && idOf(it.variant)) ||
+                (it.productVariant && it.productVariant.variantId) || null;
+    if (!vid) continue;
+    binv[vid] = {
+      quantity: typeof it.quantity === 'number' ? it.quantity : null,
+      tracked: it.trackQuantity !== false,
+    };
+  }
+  const bart = src.products.map((res) => toArtwork(res, binfo, binv)).filter((a) => a.image);
+  console.log('[AG] catalog (backend):', src.products.length, 'loaded,', bart.length, 'with images');
+  return bart;
+  */
+
   const info = await loadInfoSections();
   const inventory = await loadInventory();
 
