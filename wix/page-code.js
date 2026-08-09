@@ -27,7 +27,6 @@
  */
 
 import { productsV3 } from '@wix/stores';
-import { categories } from '@wix/categories';
 import { currentCartV2 } from '@wix/ecom';
 import wixLocation from 'wix-location';
 
@@ -37,6 +36,25 @@ const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
 /* The store's "All Products" category — every product is in it, so it is not a
    collection worth showing in the menu. */
 const ALL_PRODUCTS = '97859c36-72bd-40f3-846d-3d8c533ea382';
+
+/* Category id -> the name shown in the gallery's Collections menu.
+ *
+ * This is a lookup table rather than a query because the `@wix/categories`
+ * package isn't available in this site's Velo environment — importing it
+ * fails the build with "Cannot find module '@wix/categories'". Products only
+ * carry category *ids*, so the names have to come from somewhere; hard-coding
+ * the four that exist is the honest trade for a catalogue this size.
+ *
+ * If you add or rename a collection in Wix, add it here too. Anything missing
+ * is logged to the console and the artwork falls back to "Works", so a stale
+ * entry shows up as a wrong menu label rather than a silent disappearance.
+ */
+const CATEGORY_NAMES = {
+  '8e48dec4-59a1-4310-9bc5-ceb5c8bb1bb6': 'Crowned Girls',
+  '49bca492-5965-44fc-ba17-073624eb3659': 'Angels & Companions',
+  'dcd8b88c-b308-4348-9d38-091984855f70': 'Kind Words',
+  'b3c85211-c373-43d3-9fc7-46f5c66d402c': 'Night Studies',
+};
 
 /* The SDK names ids `_id`, but nested references (category refs, for one) come
    back as `id`. Reading them through an `any` helper keeps the editor's type
@@ -70,30 +88,9 @@ function choiceOf(variant, optionName) {
   return null;
 }
 
-/* categoryId -> display name, loaded once per page view. */
-let categoryNames = null;
-async function loadCategoryNames() {
-  if (categoryNames) return categoryNames;
-  categoryNames = {};
-  try {
-    /** @type {any} */
-    const res = await categories.queryCategories(
-      {},
-      { treeReference: { appNamespace: '@wix/stores', treeKey: null } }
-    );
-    for (const c of res.categories || res.items || []) {
-      const id = idOf(c);
-      if (id) categoryNames[id] = c.name;
-    }
-  } catch (err) {
-    console.error('[AG] could not read categories; collections will be empty:', err);
-  }
-  return categoryNames;
-}
-
 /* Turn one Wix product into the shape index.html expects. */
 /** @param {any} product */
-function toArtwork(product, names) {
+function toArtwork(product) {
   const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
   /* Originals: one visible Original variant is the sellable one. Prints: one
@@ -137,7 +134,11 @@ function toArtwork(product, names) {
   const collections = catRefs
     .map(idOf)
     .filter((id) => id && id !== ALL_PRODUCTS)
-    .map((id) => names[id])
+    .map((id) => {
+      const name = CATEGORY_NAMES[id];
+      if (!name) console.warn('[AG] no name for category', id, '- add it to CATEGORY_NAMES');
+      return name;
+    })
     .filter(Boolean);
 
   const media = product.media && product.media.main && product.media.main.image;
@@ -162,8 +163,6 @@ function toArtwork(product, names) {
 }
 
 async function buildCatalog() {
-  const names = await loadCategoryNames();
-
   /* queryProducts does NOT return variant data, so each product is fetched
      individually for its variant ids and per-finish prices. Fine for a
      catalogue this size; if it grows past a few dozen, cache the result
@@ -194,7 +193,7 @@ async function buildCatalog() {
 
   return full
     .filter(Boolean)
-    .map((res) => toArtwork(res, names))
+    .map((res) => toArtwork(res))
     .filter((a) => a.image);
 }
 
