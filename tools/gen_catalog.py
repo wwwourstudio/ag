@@ -116,6 +116,8 @@ ROWS = [
 # Edition). These are one value for the whole catalogue in Wix today, so they
 # are the same for every piece here too. The live bridge reads them from Wix
 # directly; this snapshot just needs to agree with it.
+# Mirrors the store's shared "medium" info section.
+MEDIUM = "Mixed media on paper"
 SIZE = "16 x 20 in"
 YEAR = 2024
 EDITION = 50
@@ -135,6 +137,7 @@ def build():
             "url": SITE + "/product-page/" + slug,
             "image": CDN + media + TRANSFORM,
             "title": name,
+            "medium": MEDIUM,
             "size": SIZE,
             "year": YEAR,
             "edition": EDITION,
