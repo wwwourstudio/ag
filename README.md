@@ -62,22 +62,16 @@ were recovered from the running production deployment.
 
 ## Wix side
 
-Two files, and which one they go in matters:
+One file: `wix/page-code.js` goes in the **Gallery page's** code panel — the
+editor tab named after the page. Nowhere else, and nothing else needed.
 
-| File here | Goes in Wix |
-| --- | --- |
-| `wix/public-artworkSync.js` | Public & Backend -> **Public** -> `artworkSync.js` |
-| `wix/page-code.js` | the **Gallery page's** code panel |
-
-Create the Public file first — the page code imports it as
-`from 'public/artworkSync'`, with no `.js` extension (Velo does not resolve the
-extension, and the module has to exist before the import will bind).
-
-`$w` and `wix-location` exist only in page code. Putting the catalog logic in
-`data.js` or a Public file alongside `$w` fails the build with
-`Cannot use namespace '$w' as a value`, which is why the two are separate: the
-Public module is pure data (reads the Wix catalog, writes to the Wix cart) and
-the page code does nothing but wire it to the embed.
+- Not `data.js`, not a Public file: `$w` and `wix-location` exist only in page
+  code, and using them elsewhere fails with
+  `Cannot use namespace '$w' as a value`.
+- It is deliberately self-contained. Splitting the data half into
+  `Public > artworkSync.js` read better, but the page code could not resolve
+  `public/artworkSync` in this workspace, and one file has no import path to
+  get wrong.
 
 ## Deploying
 
