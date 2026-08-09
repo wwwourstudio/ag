@@ -31,13 +31,16 @@
  */
 
 import { Permissions, webMethod } from 'wix-web-module';
-import { elevate } from 'wix-auth';
+/* @wix/essentials, not 'wix-auth' — see artworkCatalog.web.js. */
+import { auth } from '@wix/essentials';
 import { categories } from '@wix/categories';
 
 export const readCategoryNames = webMethod(Permissions.Anyone, async () => {
   const names = {};
   try {
-    const queryCategories = elevate(categories.queryCategories);
+    /* Cast for the same reason as artworkCatalog.web.js: elevate() erases the
+       wrapped method's parameter list. */
+    const queryCategories = /** @type {any} */ (auth.elevate(categories.queryCategories));
     const res = await queryCategories({
       treeReference: { appNamespace: '@wix/stores' },
       query: { cursorPaging: { limit: 100 } },

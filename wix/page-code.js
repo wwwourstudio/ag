@@ -51,7 +51,13 @@ import { currentCartV2 } from '@wix/ecom';
    Why it exists: reading the store from here returns an empty page with no
    error — `[AG] built 0 artworks` — which is what a permission-restricted
    read looks like from frontend code. Permissions can only be raised in
-   backend code, so the reads happen there and this calls one method. */
+   backend code, so the reads happen there and this calls one method.
+
+   TO BACK OUT: comment this import and the `buildCatalogViaBackend()` call in
+   buildCatalog(). The gallery falls straight back to reading the store from
+   here, which is exactly how it behaves today, and the console then reports
+   `[AG] catalog (direct): N listed, N loaded, N with images`. Do that if the
+   backend file won't build — the diagnostic is worth more than the fix. */
 import { readCatalogSources } from 'backend/artworkCatalog.web';
 
 /* --- COLLECTION NAMES (optional) ---------------------------------------

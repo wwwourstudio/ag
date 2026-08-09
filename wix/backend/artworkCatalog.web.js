@@ -45,16 +45,28 @@
  */
 
 import { Permissions, webMethod } from 'wix-web-module';
-import { elevate } from 'wix-auth';
+/* `auth.elevate` from @wix/essentials, NOT `elevate` from 'wix-auth'.
+   wix-auth is the older Velo module and does not bind an @wix/* SDK method: it
+   hands back the unbound descriptor, so the call returns a function expecting
+   an HttpClient instead of a promise. The editor says as much —
+   "cursorPaging does not exist in type 'HttpClient'" and "'await' has no
+   effect on the type of this expression". @wix/essentials is the elevate that
+   matches the @wix/* SDK, and is what the SDK docs use. */
+import { auth } from '@wix/essentials';
 import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
 
 const idOf = (o) => (o ? o._id || o.id : null);
 
 export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
-  const queryProducts = elevate(productsV3.queryProducts);
-  const getProduct = elevate(productsV3.getProduct);
-  const queryInfoSections = elevate(infoSectionsV3.queryInfoSections);
-  const searchInventoryItems = elevate(inventoryItemsV3.searchInventoryItems);
+  /* elevate() is declared as `(sourceFunction: Function) => Function`, so the
+     wrapped method's parameter list is erased and the editor reports
+     "Expected 0-1 arguments, but got 2" on the two-argument getProduct call
+     below. Casting to `any` restores a callable the checker won't argue with;
+     the runtime calls are unchanged. */
+  const queryProducts = /** @type {any} */ (auth.elevate(productsV3.queryProducts));
+  const getProduct = /** @type {any} */ (auth.elevate(productsV3.getProduct));
+  const queryInfoSections = /** @type {any} */ (auth.elevate(infoSectionsV3.queryInfoSections));
+  const searchInventoryItems = /** @type {any} */ (auth.elevate(inventoryItemsV3.searchInventoryItems));
 
   /* Info sections and inventory are each optional: the gallery drops the
      Medium/Size/Year rows and the "37 left" label rather than failing the
@@ -75,7 +87,7 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
     console.error('[AG/backend] could not read inventory:', err);
   }
 
-  const listed = await queryProducts({ cursorPaging: { limit: 100 } }, { fields: [] });
+  const listed = await queryProducts({ cursorPaging: { limit: 100 } });
   const items = listed.products || listed.items || [];
   console.log('[AG/backend] queryProducts returned', items.length, 'products');
 
@@ -99,6 +111,17 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
       )
     )
   ).filter(Boolean);
+
+  /* The `fields` projection above is what carries variant data back, and it
+     travels as getProduct's SECOND argument — through a wrapper whose type
+     signature drops it. If elevate ever stopped forwarding it, products would
+     arrive looking perfectly valid but with no variants, and the gallery would
+     quietly lose every price, every stock flag and every Add to cart. Too
+     quiet a failure to leave unwatched. */
+  if (products.length && !products.some((p) => p.variantsInfo && p.variantsInfo.variants)) {
+    console.error('[AG/backend] products came back with no variantsInfo — the fields ' +
+                  'projection did not reach getProduct. Prices and Add to cart will not work.');
+  }
 
   return { products, infoSections, inventoryItems };
 });
