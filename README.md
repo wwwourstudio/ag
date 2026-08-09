@@ -49,10 +49,10 @@ The gallery loads its images from `art-web/02.jpg` … `art-web/10.jpg`
 src: (window.AG_ART && window.AG_ART[n]) || ("art-web/" + n + ".jpg")
 ```
 
-Those JPEGs exist on the live deployment but are **not** stored here, so this
-repo alone is not a complete deployable copy. Any redeploy has to include an
-`art-web/` directory alongside `index.html`, or define `window.AG_ART` as a map
-of image number to URL before the component boots.
+That fallback is gone. Artwork now comes from the Wix CDN through resize
+transforms, both in the live catalog and in the baked snapshot, so this repo is
+a complete deployable copy. The only binary asset is `logo/wordmark.png`, which
+the loader samples to build its particle wordmark.
 
 ## Provenance
 
@@ -77,7 +77,6 @@ the page code does nothing but wire it to the embed.
 
 ## Deploying
 
-The project has no git integration — deployments are direct uploads of the file
-tree (`index.html`, `support.js`, and `art-web/`). Connecting the Vercel project
-to this repository would let pushes deploy instead, but the artwork images need
-to be committed first.
+The Vercel project is connected to this repository and `main` is its production
+branch, so a push to `main` deploys. `.vercelignore` keeps `README.md`, `tools/`
+and `wix/` off the site's domain.
