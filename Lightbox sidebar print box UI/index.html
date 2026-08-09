@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <script>
+  /* --- Wix bridge (added) ------------------------------------------------ */
+  (function () {
+    var W = window;
+    if (W.AGWix) return;
+    var api = {
+      catalog: null,
+      inWix: W.parent !== W,
+      send: function (m) { if (W.parent !== W) { try { W.parent.postMessage(m, "*"); } catch (e) {} } },
+      openProduct: function (slug, url) {
+        if (W.parent !== W) api.send({ type: "openProduct", slug: slug, url: url });
+        else if (url) W.open(url, "_blank");
+      }
+    };
+    api._pending = null;
+    api._restore = function () {
+      if (api._pending && api._pending.btn) api._pending.btn.textContent = api._pending.label;
+      api._pending = null;
+    };
+    api.addToCart = function (productId, variantId, label, btn) {
+      api._restore();
+      api._pending = { label: label, btn: btn };
+      if (btn) btn.textContent = "Adding\u2026";
+      api.send({ type: "addToCart", productId: productId, variantId: variantId, quantity: 1 });
+      setTimeout(api._restore, 6000);
+    };
+    W.addEventListener("message", function (e) {
+      var m = e && e.data;
+      if (!m) return;
+      if (m.type === "cartResult") {
+        if (m.ok) {
+          api._restore();
+          if (typeof api.onCartAdded === "function") api.onCartAdded();
+        } else {
+          var p = api._pending;
+          if (p && p.btn) {
+            p.btn.textContent = "Failed \u2014 see console";
+            p.btn.style.color = "#c0392b";
+            (function (btn, label) {
+              setTimeout(function () { btn.textContent = label; btn.style.color = ""; }, 4000);
+            })(p.btn, p.label);
+            api._pending = null;
+          }
+          console.error("[gallery] add to cart failed:", m.error || "unknown");
+        }
+        return;
+      }
+      /* How many pixels of this frame's bottom edge sit below the browser
+         viewport. On a free Wix site the promo banner pushes the frame down
+         and swallows the bottom bar; the parent measures the overhang and
+         we lift the chrome by that much. Goes to 0 by itself once the
+         banner disappears on premium, so the bar drops back down. */
+      if (m.type === "viewport") {
+        api._parentCut = true;
+        api._applyCut(Number(m.bottomCut) || 0);
+        return;
+      }
+      if (m.type !== "catalog") return;
+      api.catalog = Array.isArray(m.artworks) ? m.artworks : [];
+      W.dispatchEvent(new CustomEvent("agwix:catalog", { detail: api.catalog }));
+    });
+    /* --- Keep the bottom bar on screen -----------------------------------
+       On a free Wix site the "created by" banner sits above this frame and
+       pushes its bottom edge below the browser viewport, hiding the
+       Sphere/Wall bar and the Collections menu. IntersectionObserver in an
+       iframe reports intersection against the TOP-LEVEL viewport, so a
+       full-height sentinel tells us exactly how many pixels of our bottom
+       edge are cut off — no cooperation from the Wix page required. When
+       the banner goes away on premium the overhang becomes 0 and the bar
+       settles back down on its own. */
+    api._parentCut = false;
+    function applyCut(px) {
+      var cut = Math.max(0, Math.min(400, Math.round(px)));
+      if (cut === api.bottomCut) return;
+      api.bottomCut = cut;
+      document.documentElement.style.setProperty("--ag-cut", cut + "px");
+    }
+    api._applyCut = applyCut;
+    function watchClipping() {
+      if (!W.IntersectionObserver) return;
+      var probe = document.createElement("div");
+      probe.setAttribute("data-ag-probe", "1");
+      probe.style.cssText = "position:fixed;left:0;top:0;width:1px;height:100%;" +
+                            "pointer-events:none;opacity:0;z-index:-1;";
+      document.body.appendChild(probe);
+      var steps = [];
+      for (var i = 0; i <= 100; i++) steps.push(i / 100);
+      var io = new IntersectionObserver(function (entries) {
+        if (api._parentCut) return;
+        var e = entries[entries.length - 1];
+        var r = e.boundingClientRect, ir = e.intersectionRect;
+        /* Nothing visible at all: leave the last known value alone rather
+           than snapping the bar to a wrong place mid-scroll. */
+        if (!e.isIntersecting || ir.height === 0) return;
+        applyCut(r.bottom - ir.bottom);
+      }, { threshold: steps });
+      io.observe(probe);
+      /* Thresholds only fire on crossings, so nudge it after layout settles
+         and whenever the frame is resized. */
+      var kick = function () { io.unobserve(probe); io.observe(probe); };
+      W.addEventListener("resize", kick);
+      W.addEventListener("orientationchange", kick);
+      setTimeout(kick, 300);
+      setTimeout(kick, 1500);
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", watchClipping);
+    } else {
+      watchClipping();
+    }
+
+    W.AGWix = api;
+    api.send({ type: "ready" });
+    W.addEventListener("load", function () { api.send({ type: "ready" }); });
+    setTimeout(function () { if (!api.catalog) api.send({ type: "ready" }); }, 1200);
+  })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Jost:wght@200;300;400;500&amp;display=swap">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #f5f3ef; -webkit-text-size-adjust: 100%; }
+    a { color: #14171a; text-decoration: none; }
+    a:hover { color: #2ea060; }
+    ::selection { background: #2ea060; color: #f5f3ef; }
+    @keyframes softIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes glowDrift { 0% { transform: scale(1) translate(0,0); } 50% { transform: scale(1.1) translate(1.6%,-1.4%); } 100% { transform: scale(1) translate(0,0); } }
+    @keyframes wipeUp { from { clip-path: inset(108% 0 0 0); transform: translateY(26px); } to { clip-path: inset(-36% 0 0 0); transform: translateY(0); } }
+    @keyframes meterIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes holoSpin { to { transform: rotate(360deg); } }
+    @keyframes holoHue { to { filter: hue-rotate(360deg); } }
+    @keyframes holoSlide { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+    @keyframes holoSheen { 0% { background-position: 160% 0; } 55% { background-position: -60% 0; } 100% { background-position: -60% 0; } }
+    @keyframes panelIn { from { transform: translateX(102%); } to { transform: translateX(0); } }
+    @keyframes lbIn { from { opacity: 0; transform: perspective(1800px) rotateY(9deg) scale(.94); } to { opacity: 1; transform: perspective(1800px) rotateY(0) scale(1); } }
+    @keyframes swapNext { from { opacity: .15; transform: perspective(1800px) translateX(13%) rotateY(-34deg) scale(.91); } to { opacity: 1; transform: none; } }
+    @keyframes swapPrev { from { opacity: .15; transform: perspective(1800px) translateX(-13%) rotateY(34deg) scale(.91); } to { opacity: 1; transform: none; } }
+
+    /* --- Lightbox on small screens -------------------------------------
+       The two-column layout needs at least a 300px detail column plus room
+       for the artwork; below roughly 820px the artwork is squeezed to
+       nothing and the detail column overflows. Stack instead: artwork on
+       top at a size worth looking at, details scrolling underneath. */
+    @media (max-width: 820px) {
+      [data-lb-grid] {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto minmax(0, 1fr) !important;
+      }
+      [data-lb-side] {
+        order: 1 !important;
+        border-right: 0 !important;
+        border-top: 1px solid rgba(20,23,26,.08) !important;
+        padding: 20px clamp(18px, 5vw, 28px) 28px !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      [data-lb-view] {
+        order: 0 !important;
+        padding: clamp(44px, 7vh, 64px) 16px 12px !important;
+      }
+      [data-lb-img] {
+        max-width: min(88vw, 520px) !important;
+        max-height: 38vh !important;
+      }
+      /* Full width once the detail column is no longer beside it. */
+      [data-lb-strip] { left: 0 !important; }
+    }
+
+    /* Short landscape phones: give the artwork the height instead. */
+    @media (max-width: 820px) and (max-height: 520px) {
+      [data-lb-img] { max-height: 46vh !important; }
+      [data-lb-view] { padding-top: 28px !important; }
+    }
+
+    /* --- Short desktop viewports ----------------------------------------
+       The two purchase cards are the point of this panel, and on a laptop
+       window cut to ~700px of height they sat below the fold. Tighten the
+       editorial half — title, specs, excerpt — and leave the buy half at
+       full size. Under 620px the excerpt goes entirely: it is the one thing
+       here a buyer can do without. */
+    @media (min-width: 821px) and (max-height: 780px) {
+      [data-lb-side] { padding-top: 18px !important; }
+      [data-lb-title] { font-size: 26px !important; }
+      [data-lb-spec] { padding: 9px 0 !important; }
+      [data-lb-excerpt] { margin-top: 10px !important; font-size: 13px !important; line-height: 1.55 !important; }
+      [data-lb-card] { margin-top: 10px !important; gap: 8px !important; padding: 12px !important; }
+      [data-lb-card="print"] { margin-top: 8px !important; }
+    }
+    @media (min-width: 821px) and (max-height: 620px) {
+      [data-lb-excerpt] { display: none !important; }
+      [data-lb-title] { font-size: 23px !important; }
+      [data-lb-titlewrap] { margin-top: 10px !important; }
+      [data-lb-artist] { margin-top: 8px !important; }
+      [data-lb-specs] { margin-top: 12px !important; }
+      [data-lb-tail] { height: 8px !important; }
+    }
+  </style>
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+      <rect width="240" height="240" fill="#f0ece5"></rect>
+      <circle cx="120" cy="108" r="60" fill="none" stroke="#14171a" stroke-width="1.4" opacity=".26"></circle>
+      <rect x="84" y="72" width="42" height="52" fill="#d63484" opacity=".85" transform="rotate(-8 105 98)"></rect>
+      <rect x="122" y="92" width="40" height="50" fill="#2ea060" opacity=".8" transform="rotate(7 142 117)"></rect>
+      <text x="120" y="198" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="26" font-weight="300" letter-spacing="1" fill="#14171a">ANNIE</text>
+      <text x="120" y="224" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="26" font-weight="900" letter-spacing="-1" fill="#14171a">GREEN</text>
+    </svg>
+  </template>
+</helmet>
+<div style="position: fixed; inset: 0; overflow: hidden; background: #f5f3ef; color: #14171a; font-family: 'Jost', system-ui, sans-serif; touch-action: none;">
+
+  <div ref="{{ wash }}" style="position: absolute; inset: -20%; z-index: 0; pointer-events: none; filter: blur(72px) saturate(1.35);">
+    <div ref="{{ blobA }}" style="position: absolute; left: 8%; top: 12%; width: 46%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(46,190,110,.62) 0%, rgba(46,190,110,.22) 46%, rgba(46,190,110,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobB }}" style="position: absolute; right: 6%; top: 8%; width: 44%; height: 48%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(232,64,150,.58) 0%, rgba(232,64,150,.2) 46%, rgba(232,64,150,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobC }}" style="position: absolute; right: 16%; bottom: 6%; width: 50%; height: 52%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(96,150,255,.5) 0%, rgba(96,150,255,.18) 48%, rgba(96,150,255,0) 76%); will-change: transform;"></div>
+    <div ref="{{ blobD }}" style="position: absolute; left: 12%; bottom: 10%; width: 42%; height: 46%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,196,78,.46) 0%, rgba(255,196,78,.16) 48%, rgba(255,196,78,0) 76%); will-change: transform;"></div>
+  </div>
+  <canvas ref="{{ sphereDust }}" style="position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
+  <canvas ref="{{ sphereDustFront }}" style="position: absolute; inset: 0; z-index: 2200; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
+  <div style="position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 86% at 50% 46%, transparent 42%, rgba(245,243,239,.85) 100%);"></div>
+
+  <div ref="{{ wall }}" style="position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none;">
+    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, #c6c3bf 0%, #d5d2ce 26%, #dad7d3 48%, #cecbc7 72%, #bab7b3 92%, #a9a6a3 100%);"></div>
+    <div style="position: absolute; inset: 0; background: radial-gradient(150% 90% at 50% 44%, transparent 30%, rgba(18,18,20,.18) 74%, rgba(14,14,16,.4) 100%);"></div>
+    <div ref="{{ lights }}" style="position: absolute; inset: 0;"></div>
+  </div>
+
+  <div ref="{{ mark }}" style="position: absolute; left: clamp(18px, 3vw, 34px); top: clamp(16px, 2.6vh, 28px); z-index: 1000; transform-origin: 0 0; pointer-events: none; display: flex; flex-direction: column; gap: 12px; white-space: nowrap; perspective: 1600px; perspective-origin: 50% 46%;">
+    <span ref="{{ markWord }}" style="display: flex; align-items: baseline; gap: .1em; text-transform: uppercase; line-height: .82; color: #14171a; transform-style: preserve-3d; will-change: transform;">
+      <span style="font-weight: 200; font-size: 104px; letter-spacing: .015em;">Annie</span>
+      <span ref="{{ markBold }}" style="font-family: 'Archivo Black', 'Jost', sans-serif; font-weight: 900; font-size: 104px; letter-spacing: -.038em; transition: color .12s linear;">Green</span>
+    </span>
+    <span ref="{{ markSub }}" style="display: flex; align-items: center; gap: 16px; padding-left: .12em;">
+      <span style="flex: 1; height: 1px; background: rgba(20,23,26,.3);"></span>
+      <span style="font-size: 16px; letter-spacing: .62em; text-transform: uppercase; color: rgba(20,23,26,.55);">Artist</span>
+    </span>
+  </div>
+
+  <div ref="{{ stage }}" onClick="{{ openTile }}" style="position: absolute; inset: 0; cursor: grab; -webkit-user-select: none; user-select: none;">
+    <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
+      <div data-work="1" style="position: absolute; left: 0; top: 0; width: 300px; cursor: pointer; will-change: transform, opacity; transform-origin: 50% 50%; -webkit-tap-highlight-color: transparent;">
+        <img data-src="{{ w.src }}" alt="Artwork by Annie Green" style="display: block; width: 100%;">
+        <span data-glass="1" style="position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(112deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 44%, rgba(255,255,255,0) 64%, rgba(255,255,255,.16) 80%, rgba(255,255,255,.34) 100%);"></span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div ref="{{ vignette }}" style="position: absolute; inset: 0; z-index: 2500; pointer-events: none; background: radial-gradient(122% 84% at 50% 47%, rgba(20,23,26,0) 46%, rgba(20,23,26,.07) 74%, rgba(20,23,26,.19) 100%);"></div>
+
+  <nav ref="{{ chromeTop }}" style="position: absolute; top: max(14px, env(safe-area-inset-top)); right: clamp(14px, 2.4vw, 26px); z-index: 3000; display: flex; align-items: center; gap: clamp(12px, 1.6vw, 20px); padding: 2px 0; opacity: 0;">
+  </nav>
+
+  <div ref="{{ chromeBottom }}" style="position: absolute; left: 0; right: 0; bottom: calc(max(20px, env(safe-area-inset-bottom)) + var(--ag-cut, 0px)); z-index: 3000; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 clamp(18px, 3vw, 34px); opacity: 0; transition: bottom .25s ease;">
+    <div>
+      <div ref="{{ colMenu }}" onClick="{{ pickCol }}" style="position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%) translateY(10px) scale(.97); opacity: 0; visibility: hidden; transform-origin: 50% 100%; transition: opacity .28s ease, transform .34s cubic-bezier(.2,.85,.25,1), visibility .34s; width: min(300px, 84vw); display: flex; flex-direction: column; border-radius: 20px; background: linear-gradient(160deg, rgba(255,255,255,.82), rgba(255,255,255,.64)); border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(50px) saturate(1.9) brightness(1.06); -webkit-backdrop-filter: blur(50px) saturate(1.9) brightness(1.06); box-shadow: 0 38px 64px -30px rgba(20,23,26,.5), inset 0 1px 0 rgba(255,255,255,.9); overflow: hidden;">
+        <sc-for list="{{ collections }}" as="c" hint-placeholder-count="5">
+          <button data-col="{{ c.i }}" style="display: flex; align-items: center; justify-content: space-between; gap: 14px; appearance: none; cursor: pointer; border: 0; border-bottom: 1px solid rgba(255,255,255,.4); background: transparent; padding: 14px 18px; font: inherit; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: rgba(20,23,26,.75); text-align: left; transition: background .22s ease, color .22s ease;">
+            <span>{{ c.label }}</span>
+            <span data-col-count="1" style="font-size: 10px; letter-spacing: .1em; color: rgba(20,23,26,.45);">{{ c.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px; background: linear-gradient(145deg, rgba(255,255,255,.8), rgba(255,255,255,.62)); border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(46px) saturate(1.9) brightness(1.06); -webkit-backdrop-filter: blur(46px) saturate(1.9) brightness(1.06); box-shadow: 0 18px 42px -22px rgba(20,23,26,.5), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.35);">
+      <div style="position: relative;">
+        <button data-coltrigger="1" onClick="{{ toggleCol }}" style="display: inline-flex; align-items: center; gap: 12px; appearance: none; cursor: pointer; font: inherit; font-size: 9px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; color: rgba(20,23,26,.5); height: 32px; padding: 0 17px; border-radius: 999px; background: transparent; border: 0; white-space: nowrap; transition: background .25s ease, color .25s ease;" style-hover="background: rgba(20,23,26,.06); color: #14171a;">
+          <span ref="{{ colLabel }}">Collections</span>
+          <span ref="{{ colCaret }}" style="display: inline-flex; color: rgba(20,23,26,.45); transition: transform .3s ease;"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg></span>
+        </button>
+      </div>
+
+        <button ref="{{ sphereRef }}" onClick="{{ pickSphere }}" style="appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 9px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; height: 32px; padding: 0 17px; border-radius: 999px; color: rgba(20,23,26,.5); background: transparent; transition: color .3s ease, background .3s ease;">Sphere</button>
+        <button ref="{{ galleryRef }}" onClick="{{ pickGallery }}" style="appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 9px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; height: 32px; padding: 0 17px; border-radius: 999px; color: rgba(20,23,26,.5); background: transparent; transition: color .3s ease, background .3s ease;">Wall</button>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ lbOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; z-index: 8000; background: #efece6; animation: softIn .32s ease both;">
+      <div style="position: absolute; inset: 0; background: radial-gradient(64% 52% at 34% 20%, rgba(255,255,255,.9) 0%, transparent 70%), radial-gradient(46% 42% at 84% 78%, rgba(214,52,132,.1) 0%, transparent 72%);"></div>
+
+      <div data-lb-grid="1" style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
+        <div data-lb-view="1" style="position: relative; display: grid; place-items: center; min-width: 0; padding: clamp(58px, 9vh, 96px) clamp(20px, 4vw, 56px) clamp(112px, 16vh, 156px);">
+          <div onClick="{{ closeTile }}" title="Click anywhere to close" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
+          <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
+          <div ref="{{ lbFrame }}" style="position: relative; z-index: 1; animation: lbIn .6s cubic-bezier(.2,.7,.2,1) both;">
+            <div style="position: relative; padding: clamp(9px, 1.3vw, 17px); background: linear-gradient(148deg, #2c2d31 0%, #101012 40%, #1d1e21 100%); box-shadow: 0 60px 90px -46px rgba(20,23,26,.55), inset 0 2px 0 rgba(255,255,255,.16), inset 0 -2px 0 rgba(0,0,0,.6), 0 0 0 1px rgba(20,23,26,.1);">
+              <div ref="{{ lbZoom }}" onMouseMove="{{ zoomMove }}" onMouseEnter="{{ zoomIn }}" onMouseLeave="{{ zoomOut }}" style="padding: clamp(10px, 1.8vw, 24px); background: #fbfaf8; box-shadow: inset 0 2px 7px rgba(20,23,26,.14); cursor: crosshair;">
+                <div style="position: relative; overflow: hidden;">
+                  <img data-lb-img="1" ref="{{ lbImg }}" alt="Artwork enlarged" style="display: block; max-width: min(50vw, 700px); max-height: 52vh; width: auto; height: auto; transform-origin: 50% 50%; transition: transform .5s cubic-bezier(.2,.8,.2,1);">
+                </div>
+              </div>
+              <span style="position: absolute; inset: 0; pointer-events: none; background: linear-gradient(116deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.02) 26%, rgba(255,255,255,0) 46%, rgba(255,255,255,0) 68%, rgba(255,255,255,.08) 84%, rgba(255,255,255,.22) 100%);"></span>
+            </div>
+            <span ref="{{ zoomHint }}" style="display: block; margin-top: 16px; text-align: center; font-size: 9px; letter-spacing: .26em; text-transform: uppercase; color: rgba(20,23,26,.42); pointer-events: none; transition: opacity .3s ease;">Hover to inspect</span>
+          </div>
+
+          <button onClick="{{ lbPrev }}" aria-label="Previous work" style="position: absolute; z-index: 2; top: 50%; left: clamp(10px, 2.4vw, 34px); transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; appearance: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: transparent; color: rgba(20,23,26,.7); cursor: pointer; transition: background .35s ease, color .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);" style-hover="background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); color: #14171a; transform: translateY(-50%) scale(1.1);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 7.5 12l7 7"></path></svg></button>
+          <button onClick="{{ lbNext }}" aria-label="Next work" style="position: absolute; z-index: 2; top: 50%; right: clamp(10px, 2.4vw, 34px); transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; appearance: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: transparent; color: rgba(20,23,26,.7); cursor: pointer; transition: background .35s ease, color .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);" style-hover="background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); color: #14171a; transform: translateY(-50%) scale(1.1);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5l7 7-7 7"></path></svg></button>
+        </div>
+
+        <aside data-lb-side="1" onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) 0; background: rgba(255,255,255,.55); border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
+          <div style="display: flex; align-items: baseline; gap: 12px;">
+            <span ref="{{ lbCollection }}" style="font-size: 9px; letter-spacing: .24em; text-transform: uppercase; color: #2ea060;">Crowned Girls</span>
+          </div>
+          <div data-lb-titlewrap="1" ref="{{ lbTitleWrap }}" style="position: relative; margin-top: 16px; overflow: hidden; flex: none;">
+            <div data-lb-title="1" ref="{{ lbTitle }}" style="font-weight: 200; font-size: clamp(26px, 2.5vw, 38px); line-height: 1.12; letter-spacing: .012em; text-transform: uppercase; color: #14171a; white-space: nowrap; will-change: transform; transition: transform 4s linear;">Crowned Girl 01</div>
+            <span ref="{{ lbTitleFade }}" style="position: absolute; top: 0; right: 0; bottom: 0; width: 46px; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(250,249,246,0) 0%, rgba(250,249,246,.95) 100%); transition: opacity .3s ease;"></span>
+          </div>
+          <div data-lb-artist="1" style="margin-top: 12px; display: flex; align-items: baseline; gap: .1em; text-transform: uppercase; line-height: .9; color: #14171a;">
+            <span style="font-weight: 200; font-size: 15px; letter-spacing: .02em;">Annie</span>
+            <span style="font-family: 'Archivo Black', 'Jost', sans-serif; font-weight: 900; font-size: 15px; letter-spacing: -.038em;">Green</span>
+          </div>
+
+          <div data-lb-specs="1" style="margin-top: 20px; display: flex; flex-direction: column; border-top: 1px solid rgba(20,23,26,.12);">
+            <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
+              <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Medium</span>
+              <span style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;">Mixed media on paper</span>
+            </div>
+            <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
+              <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Dimensions</span>
+              <span ref="{{ lbSize }}" style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;">16 × 20 in</span>
+            </div>
+          </div>
+
+          <p data-lb-excerpt="1" ref="{{ lbExcerpt }}" style="margin: 14px 0 0; font-weight: 300; font-size: 13.5px; line-height: 1.7; color: rgba(20,23,26,.62); text-wrap: pretty;">Pastel, wash and collage built up around a single figure, with a stamped phrase set into the lower field.</p>
+
+          <div data-lb-card="orig" onMouseEnter="{{ holoOn }}" onMouseLeave="{{ holoOff }}" style="position: relative; margin-top: 18px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid rgba(20,23,26,.14); overflow: hidden; flex: none; isolation: isolate; border-radius: 10px;" style-hover="border-color: rgba(20,23,26,.28);">
+            <span ref="{{ holoSpin }}" style="position: absolute; inset: -60%; z-index: -2; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); filter: blur(26px) saturate(1.25); opacity: .62; animation: holoSpin 14s linear infinite; transition: opacity .5s ease;"></span>
+            <span style="position: absolute; inset: -20%; z-index: -2; background: linear-gradient(115deg, rgba(255,255,255,0) 18%, rgba(255,255,255,.75) 42%, rgba(255,255,255,0) 62%); background-size: 260% 100%; animation: holoSheen 6.5s ease-in-out infinite; opacity: .5;"></span>
+            <span ref="{{ holoVeil }}" style="position: absolute; inset: 0; z-index: -1; background: rgba(255,255,255,.62); transition: background .4s ease; border-radius: 10px;"></span>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+              <span style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.62);">Original · one of one</span>
+              <span ref="{{ lbOrigStatus }}" style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: #2ea060;">Available</span>
+            </div>
+            <span ref="{{ lbOrigPrice }}" style="font-weight: 200; font-size: clamp(26px, 2.6vw, 34px); line-height: 1; letter-spacing: -.015em; color: #14171a;">$1,850</span>
+            <a ref="{{ lbOrigBtn }}" href="{{ origLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 46px; padding: 0 18px; margin-top: 2px; border-radius: 999px; background: #14171a; color: #f5f3ef; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease;" style-hover="background: #2a2d33; color: #fff;">Buy now</a>
+          </div>
+
+          <div data-lb-card="print" ref="{{ printCard }}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 11px; padding: 14px; border: 1px solid rgba(20,23,26,.14); background: rgba(255,255,255,.42); flex: none; transition: border-color .25s ease; border-radius: 10px;" style-hover="border-color: rgba(20,23,26,.28);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+              <span style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.55);">Limited print</span>
+              <span ref="{{ lbEdition }}" style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.5);">Edition of 50</span>
+            </div>
+
+            <div ref="{{ paperMenu }}" onClick="{{ pickPaper }}" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;">
+              <sc-for list="{{ papers }}" as="p" hint-placeholder-count="3">
+                <button data-paper="{{ p.i }}" title="{{ p.note }}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; appearance: none; cursor: pointer; border: 1px solid rgba(20,23,26,.18); background: rgba(255,255,255,.72); padding: 9px 10px; font: inherit; text-align: center; min-height: 44px; box-sizing: border-box; transition: border-color .2s ease, background .2s ease, color .2s ease; border-radius: 8px;">
+                  <span data-pp-label="1" style="font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #14171a;">{{ p.label }}</span>
+                  <span data-pp-delta="1" style="font-size: 10px; font-weight: 300; white-space: nowrap; color: rgba(20,23,26,.5);">{{ p.delta }}</span>
+                </button>
+              </sc-for>
+            </div>
+
+            <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 9px; border-top: 1px solid rgba(20,23,26,.12);">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span ref="{{ lbPrintPrice }}" style="font-weight: 200; font-size: clamp(20px, 2vw, 25px); line-height: 1; letter-spacing: -.015em; color: #14171a;">$220</span>
+                <span style="font-size: 10px; font-weight: 300; line-height: 1.35; color: rgba(20,23,26,.5);">Giclée · archival inkjet on fine-art paper</span>
+              </span>
+              <span ref="{{ lbPrintLeft }}" style="font-size: 10px; font-weight: 300; white-space: nowrap; color: rgba(20,23,26,.5);">37 left</span>
+            </div>
+
+            <a ref="{{ lbPrintBtn }}" href="{{ printLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid #14171a; background: transparent; color: #14171a; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease, color .25s ease;" style-hover="background: #14171a; color: #f5f3ef; border-color: #14171a;">Buy print</a>
+          </div>
+
+          <div data-lb-tail="1" style="flex: none; height: clamp(26px, 4vh, 40px);"></div>
+          <span style="position: sticky; bottom: 0; flex: none; height: 28px; margin: -28px 0 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(252,251,248,.92) 100%);"></span>
+        </aside>
+      </div>
+
+      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: 0; z-index: 2; display: flex; gap: 8px; align-items: flex-end; overflow-x: auto; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
+        <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
+          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0;">
+            <img data-src="{{ w.src }}" alt="" style="display: block; height: clamp(44px, 7vh, 62px); width: auto; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
+          </button>
+        </sc-for>
+      </div>
+
+    </div>
+  </sc-if>
+
+  <div ref="{{ loader }}" style="position: fixed; inset: 0; z-index: 9000; overflow: hidden; background: #07080a; transition: opacity .9s cubic-bezier(.6,0,.2,1);">
+    <canvas ref="{{ loaderDust }}" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block;"></canvas>
+    <div ref="{{ loaderMark }}" style="position: absolute; left: 0; top: 0; width: min(1100px, 82vw);">
+      <img ref="{{ loaderLogo }}" src="logo/wordmark.png" alt="Annie Green — Artist" style="display: block; width: 100%; height: auto; opacity: 0; transition: opacity .5s cubic-bezier(.4,0,.3,1);">
+    </div>
+    <div ref="{{ meter }}" style="position: absolute; left: 50%; bottom: clamp(56px, 12vh, 110px); width: min(560px, 78vw); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; opacity: 0; transition: opacity .6s ease;">
+      <div style="flex: 1; height: 1px; background: rgba(255,255,255,.13);">
+        <div ref="{{ bar }}" style="width: 0%; height: 100%; background: #f4f2ee;"></div>
+      </div>
+      <div ref="{{ pct }}" style="font-size: 10px; letter-spacing: .24em; color: rgba(244,242,238,.5); min-width: 44px; text-align: right;">000</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;idleSpin&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+/* --- Baked Wix Stores catalog -----------------------------------------
+   Snapshot of the live Annie Green Wix store, used when the gallery runs
+   standalone (no Wix parent frame). Inside the Wix embed the bridge sends
+   the live catalog and this is ignored entirely. Regenerate with
+   tools/gen_catalog.py after changing products in Wix.
+   Images go through Wix media transforms so the browser never downloads
+   the multi-megabyte source PNGs. */
+const AG_CATALOG_FALLBACK = [
+    {
+      "id": "f783b558-a740-488f-9bb8-fa7236795ad7",
+      "slug": "night-study-02",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-02",
+      "image": "https://static.wixstatic.com/media/ee1cab_877fff041cfd49699212736a8b37a0a2~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Night Study 02",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Night Studies"
+      ],
+      "description": "Worked in a single sitting under lamplight, edges left raw.",
+      "price": 1550,
+      "priceText": "$1,550",
+      "inStock": true,
+      "printPrice": 245,
+      "prints": {
+        "Matte": {
+          "price": 245,
+          "priceText": "$245",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 270,
+          "priceText": "$270",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 300,
+          "priceText": "$300",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "5b42f4c0-482a-4bf1-a8fb-dd53a55272ce",
+      "slug": "night-study-01",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-01",
+      "image": "https://static.wixstatic.com/media/ee1cab_63ccb5c7f9a04966ae9dc7cdf006f946~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Night Study 01",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Night Studies"
+      ],
+      "description": "Deep indigo ground worked after dark, the figures emerging from the splatter.",
+      "price": 2400,
+      "priceText": "$2,400",
+      "inStock": true,
+      "printPrice": 320,
+      "prints": {
+        "Matte": {
+          "price": 320,
+          "priceText": "$320",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 345,
+          "priceText": "$345",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 375,
+          "priceText": "$375",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "f02c87fb-47ea-49e5-9419-6007a6c691d8",
+      "slug": "small-mercies",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/small-mercies",
+      "image": "https://static.wixstatic.com/media/ee1cab_8fbaefc9dc324714a7213f5dcbcd54a9~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Small Mercies",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Kind Words"
+      ],
+      "description": "Marker and felt over collage, the lettering left deliberately unfinished.",
+      "price": 1100,
+      "priceText": "$1,100",
+      "inStock": false,
+      "printPrice": 185,
+      "prints": {
+        "Matte": {
+          "price": 185,
+          "priceText": "$185",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 210,
+          "priceText": "$210",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 240,
+          "priceText": "$240",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "d8f43217-047b-42ef-abb7-22f582131b9d",
+      "slug": "be-kind-to-yourself",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/be-kind-to-yourself",
+      "image": "https://static.wixstatic.com/media/ee1cab_6a0e83ef535f4fb5855525ce2f83ce02~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Be Kind to Yourself",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Kind Words"
+      ],
+      "description": "A stamped phrase pressed into the lower field, half-swallowed by the wash.",
+      "price": 980,
+      "priceText": "$980",
+      "inStock": true,
+      "printPrice": 175,
+      "prints": {
+        "Matte": {
+          "price": 175,
+          "priceText": "$175",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 200,
+          "priceText": "$200",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 230,
+          "priceText": "$230",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "573bbcc0-55ef-4974-b403-1ed3d042a0ef",
+      "slug": "two-together",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/two-together",
+      "image": "https://static.wixstatic.com/media/ee1cab_6205b669b8a74ee185147b678078fc30~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Two Together",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "Two figures on a bed of indigo splatter, one turned away, one facing out.",
+      "price": 1950,
+      "priceText": "$1,950",
+      "inStock": true,
+      "printPrice": 265,
+      "prints": {
+        "Matte": {
+          "price": 265,
+          "priceText": "$265",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 290,
+          "priceText": "$290",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 320,
+          "priceText": "$320",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "c058c9c5-312a-4f70-b7e4-4c7d32046100",
+      "slug": "the-keeper",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/the-keeper",
+      "image": "https://static.wixstatic.com/media/ee1cab_4d4525b27f7142eb95ab07949b9d4909~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "The Keeper",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "Stitched patchwork and marker over a headscarfed figure, holding something unseen.",
+      "price": 1750,
+      "priceText": "$1,750",
+      "inStock": true,
+      "printPrice": 250,
+      "prints": {
+        "Matte": {
+          "price": 250,
+          "priceText": "$250",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 275,
+          "priceText": "$275",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 305,
+          "priceText": "$305",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "cc1ab4d6-1b5a-4590-9056-a90e986d7ee6",
+      "slug": "angel-with-companion",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/angel-with-companion",
+      "image": "https://static.wixstatic.com/media/ee1cab_a9d875bd8f8f42e284e055512552d8c5~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Angel with Companion",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Angels & Companions"
+      ],
+      "description": "A veiled figure and her small keeper, worked on a ground of pressed blue.",
+      "price": 2100,
+      "priceText": "$2,100",
+      "inStock": true,
+      "printPrice": 280,
+      "prints": {
+        "Matte": {
+          "price": 280,
+          "priceText": "$280",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 305,
+          "priceText": "$305",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 335,
+          "priceText": "$335",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "a54d3ae3-e49c-4f94-8b54-a62a42e60f51",
+      "slug": "crowned-girl-04",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-04",
+      "image": "https://static.wixstatic.com/media/ee1cab_058fb98b3fbe4c9d84980e93a79e0c55~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 04",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Warm reds worked over a printed ground, the crown drawn in a single unbroken line.",
+      "price": 1250,
+      "priceText": "$1,250",
+      "inStock": true,
+      "printPrice": 195,
+      "prints": {
+        "Matte": {
+          "price": 195,
+          "priceText": "$195",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 220,
+          "priceText": "$220",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 250,
+          "priceText": "$250",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "1aa22102-cdb5-42ce-92d8-0d65e8e933d2",
+      "slug": "crowned-girl-03",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-03",
+      "image": "https://static.wixstatic.com/media/ee1cab_7dfa9e7104084c43bb0e178be1942749~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 03",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Ochre and gold ground, with a small figure held at the centre of the field.",
+      "price": 1650,
+      "priceText": "$1,650",
+      "inStock": false,
+      "printPrice": 240,
+      "prints": {
+        "Matte": {
+          "price": 240,
+          "priceText": "$240",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 265,
+          "priceText": "$265",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 295,
+          "priceText": "$295",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "99fa1741-dfea-4f42-b51a-c2e6ced6ad69",
+      "slug": "crowned-girl-02",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-02",
+      "image": "https://static.wixstatic.com/media/ee1cab_a211aec2eeae40dfa2327a8b084f9c09~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 02",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "A crowned figure worked in wash and pastel, her collar built from torn paper.",
+      "price": 1400,
+      "priceText": "$1,400",
+      "inStock": true,
+      "printPrice": 260,
+      "prints": {
+        "Matte": {
+          "price": 260,
+          "priceText": "$260",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 285,
+          "priceText": "$285",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 315,
+          "priceText": "$315",
+          "inStock": true
+        }
+      }
+    },
+    {
+      "id": "0ac8e5d9-6768-4f6a-be49-fb2f4b51f442",
+      "slug": "crowned-girl-01",
+      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-01",
+      "image": "https://static.wixstatic.com/media/ee1cab_5d385ee002454981873f4f5eddaa0c05~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "title": "Crowned Girl 01",
+      "size": "16 x 20 in",
+      "year": 2024,
+      "edition": 50,
+      "collections": [
+        "Crowned Girls"
+      ],
+      "description": "Pastel, wash and collage built up around a single figure, with a stamped phrase set into the lower field.",
+      "price": 1850,
+      "priceText": "$1,850",
+      "inStock": true,
+      "printPrice": 220,
+      "prints": {
+        "Matte": {
+          "price": 220,
+          "priceText": "$220",
+          "inStock": true
+        },
+        "Gloss": {
+          "price": 245,
+          "priceText": "$245",
+          "inStock": true
+        },
+        "Metallic": {
+          "price": 275,
+          "priceText": "$275",
+          "inStock": true
+        }
+      }
+    }
+  ];
+
+/* Preferred order for the Collections menu, by slugified collection name. */
+const AG_COL_ORDER = ["crowned-girls", "angels-companions", "kind-words", "night-studies"];
+
+class Component extends DCLogic {
+  state = {
+    view: null, lb: -1, col: 0, colOpen: false,
+    paper: 0,
+    sold: {}
+  };
+
+  isSold(w) { return !!(w && (w.sold || this.state.sold[w.i])); }
+
+  get view() { return this.state.view || this.props.defaultView || "sphere"; }
+
+  nudge(d) {
+    this.panTarget = null;
+    this.pan += d * (this.gap || 400);
+  }
+
+  /* --- Wix catalog helpers (added) --------------------------------------- */
+  catalog() {
+    const c = (window.AGWix && window.AGWix.catalog) || null;
+    if (c && c.length) return c;
+    return AG_CATALOG_FALLBACK;
+  }
+
+  /* True only when a Wix parent frame actually supplied the catalog. Add to
+     cart needs the parent to talk to; standalone we link to the store page. */
+  liveCatalog() {
+    const c = (window.AGWix && window.AGWix.catalog) || null;
+    return !!(c && c.length);
+  }
+
+  colKeyOf(label) {
+    return String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "works";
+  }
+
+  /* Collections the menu offers, derived from whichever catalog is in play.
+     Anything not named in AG_COL_ORDER keeps its catalog order after the
+     known ones, so a new Wix category still shows up without a code change. */
+  collectionData() {
+    if (this._cols) return this._cols;
+    const seen = {}, list = [];
+    (this.catalog() || []).forEach(p => {
+      const labels = (p.collections && p.collections.length) ? p.collections : [];
+      labels.forEach(label => {
+        const key = this.colKeyOf(label);
+        if (!seen[key]) { seen[key] = 1; list.push({ key, label }); }
+      });
+    });
+    const rank = c => {
+      const k = AG_COL_ORDER.indexOf(c.key);
+      return k < 0 ? AG_COL_ORDER.length : k;
+    };
+    list.sort((a, b) => rank(a) - rank(b));
+    this._cols = [{ key: "all", label: "View all" }].concat(list);
+    return this._cols;
+  }
+
+  paperData() {
+    const notes = {
+      Matte: "Soft, non-reflective cotton rag",
+      Gloss: "Deep blacks, high colour lift",
+      Metallic: "Pearl base with a subtle sheen"
+    };
+    const base = [
+      { label: "Matte", note: notes.Matte, delta: 0 },
+      { label: "Gloss", note: notes.Gloss, delta: 15 },
+      { label: "Metallic", note: notes.Metallic, delta: 35 }
+    ];
+
+    /* --- real prices from Wix variants (added) ------------------------- */
+    const w = this.workData()[this.state.lb];
+    if (!w || !w.prints) return base;
+    const finishes = Object.keys(w.prints);
+    if (!finishes.length) return base;
+
+    const order = ["Matte", "Gloss", "Metallic"];
+    const sorted = finishes.slice().sort((a, b) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    const anchor = w.prints[sorted[0]].price;
+    /* Every finish Wix returns is shown, sold out ones included: dropping them
+       silently shifted the selector's indexes and pointed `paper` at a
+       different finish than the one the buyer tapped. */
+    return sorted.map(f => ({
+      label: f,
+      note: notes[f] || "",
+      delta: Math.max(0, Math.round(w.prints[f].price - anchor)),
+      priceText: w.prints[f].priceText || "",
+      inStock: w.prints[f].inStock !== false,
+      left: typeof w.prints[f].left === "number" ? w.prints[f].left : 0,
+      variantId: w.prints[f].variantId || null
+    }));
+  }
+
+  currentPrint() {
+    const w = this.workData()[this.state.lb];
+    if (!w || !w.prints) return null;
+    const paper = this.paperData()[this.state.paper];
+    if (!paper) return null;
+    return w.prints[paper.label] || null;
+  }
+
+  printTotal(w) {
+    if (!w) return 0;
+    const cur = this.currentPrint();
+    if (cur) return cur.price;
+    const p = this.paperData()[this.state.paper] || { delta: 0 };
+    return w.print + p.delta;
+  }
+
+  refresh() {
+    this.vis = this.visible();
+    this.visPos = {};
+    this.vis.forEach((idx, k) => { this.visPos[idx] = k; });
+    this.bindAway();
+    const cols = this.collectionData();
+    if (this.colLabelEl) this.colLabelEl.textContent = (cols[this.state.col] || cols[0]).label;
+    if (this.colCaretEl) this.colCaretEl.style.transform = this.state.colOpen ? "rotate(180deg)" : "none";
+    if (this.colMenuEl) {
+      const o = this.state.colOpen;
+      this.colMenuEl.style.opacity = o ? "1" : "0";
+      this.colMenuEl.style.visibility = o ? "visible" : "hidden";
+      this.colMenuEl.style.pointerEvents = o ? "auto" : "none";
+      this.colMenuEl.style.transform = o ? "translateX(-50%) translateY(0) scale(1)" : "translateX(-50%) translateY(10px) scale(.97)";
+    }
+    if (this.colMenuEl) {
+      this.colMenuEl.querySelectorAll("[data-col]").forEach((b, k) => {
+        const on = k === this.state.col;
+        if (!b.__hb) {
+          b.__hb = 1;
+          b.addEventListener("pointerenter", () => { b.__hover = 1; this.refresh(); });
+          b.addEventListener("pointerleave", () => { b.__hover = 0; this.refresh(); });
+        }
+        const HOLO_BAND = "linear-gradient(100deg, #ffd6e8 0%, #d9f2ff 14%, #d8ffe4 28%, #fff6cf 42%, #ffd9f4 56%, #d5e4ff 70%, #ccfff2 84%, #ffd6e8 100%)";
+        b.style.background = on ? "#14171a" : (b.__hover ? HOLO_BAND : "transparent");
+        b.style.backgroundSize = (!on && b.__hover) ? "300% 100%" : "auto";
+        b.style.animation = (!on && b.__hover) ? "holoSlide 5s linear infinite" : "none";
+        b.style.color = on ? "#fff" : (b.__hover ? "#14171a" : "rgba(20,23,26,.72)");
+        const cnt = b.querySelector("[data-col-count]");
+        if (cnt) cnt.style.color = on ? "rgba(245,243,239,.55)" : "rgba(20,23,26,.45)";
+      });
+    }
+  }
+
+  workData() {
+    if (this._works) return this._works;
+
+    /* Single source of truth: the live Wix catalog when embedded, the baked
+       snapshot otherwise. Both arrive in the same shape. */
+    const cat = this.catalog() || [];
+    this._works = cat.map((p, i) => {
+      const cols = (p.collections && p.collections.length) ? p.collections : ["Works"];
+      return {
+        i,
+        src: p.image || (p.images && p.images[0]) || "",
+        images: p.images || [],
+        title: p.title || "Untitled",
+        collection: cols[0],
+        colKey: this.colKeyOf(cols[0]),
+        colKeys: cols.map(c => this.colKeyOf(c)),
+        excerpt: p.description || "",
+        size: p.size || "",
+        year: p.year || "",
+        price: typeof p.price === "number" ? p.price : 0,
+        priceText: p.priceText || "",
+        sold: p.inStock === false,
+        print: typeof p.printPrice === "number" ? p.printPrice : 0,
+        edition: typeof p.edition === "number" ? p.edition : 0,
+        left: typeof p.left === "number" ? p.left : 0,
+        /* Carried through so the print card can price real paper finishes
+           and Add to cart can name a variant. Dropping these is what made
+           the print card vanish and every add to cart report Unavailable. */
+        prints: p.prints || null,
+        origVariantId: p.origVariantId || null,
+        id: p.id, slug: p.slug, url: p.url
+      };
+    });
+    return this._works;
+  }
+
+  visible() {
+    const col = this.collectionData()[this.state.col];
+    const all = this.workData();
+    if (!col || col.key === "all") return all.map(w => w.i);
+    return all
+      .filter(w => (w.colKeys ? w.colKeys.indexOf(col.key) >= 0 : w.colKey === col.key))
+      .map(w => w.i);
+  }
+
+  componentDidMount() {
+    this.rotY = 0; this.rotX = 0; this.velY = 0; this.velX = 0;
+    this.pan = 0; this.panVel = 0;
+    this.wS = this.view === "sphere" ? 1 : 0;
+    this.wW = this.view === "gallery" ? 1 : 0;
+    this.mx = null; this.my = null;
+    this.t0 = performance.now();
+    this.refresh();
+
+    /* --- Wix catalog arrival (added) ------------------------------------- */
+    this.onCatalog = () => {
+      this._works = null;
+      this._cols = null;
+      this.pan = 0; this.panVel = 0;
+      this.setState({ col: 0, colOpen: false, lb: -1 });
+      this.refresh();
+      requestAnimationFrame(() => this.hydrateImgs());
+    };
+    window.addEventListener("agwix:catalog", this.onCatalog);
+
+    /* Close the lightbox after a successful add so the Wix side cart —
+       which renders in the parent document — isn't hidden behind it. */
+    if (window.AGWix) {
+      window.AGWix.onCartAdded = () => { this.setState({ lb: -1 }); };
+    }
+    if (this.catalog()) this.onCatalog();
+
+    this.onWheel = e => {
+      e.preventDefault();
+      if (this.state.lb >= 0) return;
+      if (this.view === "gallery") { this.walked = true; this.panVel += (e.deltaY + e.deltaX) * 0.55; }
+      else {
+        const dx = e.deltaX || 0, dy = e.deltaY || 0;
+        /* Wheel tumbles the sphere the same way a vertical drag does. */
+        this.velX += dy * 0.00016;
+        this.velY += dx * 0.00014;
+      }
+    };
+    window.addEventListener("wheel", this.onWheel, { passive: false });
+
+    this.drag = null;
+    this.bindAway();
+    this.onDown = e => { this.drag = { x: e.clientX, y: e.clientY, moved: 0 }; if (this.stageEl) this.stageEl.style.cursor = "grabbing"; };
+    this.onMove = e => {
+      this.mx = e.clientX; this.my = e.clientY;
+      if (!this.drag || this.state.lb >= 0) return;
+      const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
+      this.drag.x = e.clientX; this.drag.y = e.clientY;
+      this.drag.moved += Math.abs(dx) + Math.abs(dy);
+      if (this.view === "gallery") { this.walked = true; this.panVel -= dx * 1.6; }
+      else { this.velY -= dx * 0.00026; this.velX -= dy * 0.00026; }
+    };
+    this.onUp = () => { if (this.stageEl) this.stageEl.style.cursor = "grab"; setTimeout(() => { this.drag = null; }, 0); };
+    this.onLeave = () => {
+      this.mx = null; this.my = null;
+    };
+    window.addEventListener("pointerdown", this.onDown);
+    window.addEventListener("pointermove", this.onMove);
+    window.addEventListener("pointerup", this.onUp);
+    window.addEventListener("pointercancel", this.onUp);
+    window.addEventListener("pointerleave", this.onLeave);
+
+    this.onKey = e => {
+      if (this.state.lb < 0) {
+        if (e.key === "Escape" && this.state.colOpen) this.setState({ colOpen: false });
+        if (e.key === "g" || e.key === "G") this.setState({ view: this.view === "sphere" ? "gallery" : "sphere" });
+        if (this.view === "gallery") {
+          if (e.key === "ArrowRight") this.nudge(1);
+          if (e.key === "ArrowLeft") this.nudge(-1);
+        }
+        return;
+      }
+      if (e.key === "Escape") this.setState({ lb: -1 });
+      if (e.key === "ArrowRight") this.step(1);
+      if (e.key === "ArrowLeft") this.step(-1);
+    };
+    window.addEventListener("keydown", this.onKey);
+
+    this.token = (window.__galToken = (window.__galToken || 0) + 1);
+    this.tick();
+    this.hydrateImgs();
+    [60, 200, 500, 1200, 2500].forEach(d => setTimeout(() => { if (!this._imgsDone) this.hydrateImgs(); }, d));
+    this.startDust("sphere");
+    this.startDust("front");
+    this.startDust("loader");
+  }
+
+  hydrateImgs() {
+    const scope = this.rootEl || document;
+    const list = scope.querySelectorAll("img[data-src]");
+    let pending = 0;
+    for (const img of list) {
+      const v = img.getAttribute("data-src") || "";
+      if (!v || v.indexOf("{{") >= 0) { pending++; continue; }
+      if (img.getAttribute("src") !== v) img.src = v;
+    }
+    if (list.length && !pending) this._imgsDone = true;
+  }
+
+  componentDidUpdate() { this.hydrateImgs(); this.refresh(); this.syncLb(); this.syncPrint(); }
+
+  buildWordTargets(dpr) {
+    if (this.wordPts || this._wordPending || !this.loaderLogoEl) return;
+    this._wordPending = 1;
+    const go = () => {
+      /* Always clear the pending flag, including on a throw — otherwise a
+         single failure (a tainted canvas, a zero-sized layout) would wedge
+         this permanently and the wordmark would never form. */
+      try {
+        const el = this.loaderLogoEl;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !el.naturalWidth) return;
+        const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+        const off = document.createElement("canvas");
+        off.width = W; off.height = H;
+        const c = off.getContext("2d", { willReadFrequently: true });
+        c.drawImage(el, r.left * dpr, r.top * dpr, r.width * dpr, r.height * dpr);
+        const d = c.getImageData(0, 0, W, H).data;
+        const step = Math.max(2, Math.round(2.6 * dpr));
+        const pts = [];
+        for (let y = 0; y < H; y += step) {
+          for (let x = 0; x < W; x += step) {
+            if (d[(y * W + x) * 4 + 3] > 120) pts.push(x, y);
+          }
+        }
+        if (pts.length > 8) { this.wordPts = pts; this.wordStart = performance.now(); }
+      } catch (err) {
+        console.error("[gallery] could not sample the wordmark:", err);
+      } finally {
+        this._wordPending = 0;
+      }
+    };
+    const el = this.loaderLogoEl;
+    let ran = 0;
+    const once = () => { if (ran) return; ran = 1; requestAnimationFrame(go); };
+    if (el.complete && el.naturalWidth) once();
+    else el.addEventListener("load", once, { once: true });
+    setTimeout(once, 2500);
+  }
+
+  flowBlobs() {
+    if (!this.blobAEl) return;
+    const t = (performance.now() - (this.t0 || 0)) / 1000;
+    const w = innerWidth || 1, h = innerHeight || 1;
+    const mx = this.mx == null ? w * 0.5 : this.mx;
+    const my = this.my == null ? h * 0.5 : this.my;
+    const nx = (mx / w - 0.5) * 2, ny = (my / h - 0.5) * 2;
+    if (!this.blobs) {
+      this.blobs = [
+        { el: "blobAEl", lag: 0.020, pull: 190, sx: 1.00, sy: 0.62, ph: 0.0, sp: 0.17, amp: 62 },
+        { el: "blobBEl", lag: 0.014, pull: 230, sx: 0.74, sy: 1.10, ph: 2.1, sp: 0.13, amp: 78 },
+        { el: "blobCEl", lag: 0.009, pull: 265, sx: 1.20, sy: 0.85, ph: 4.0, sp: 0.10, amp: 92 },
+        { el: "blobDEl", lag: 0.006, pull: 300, sx: 0.88, sy: 1.24, ph: 5.4, sp: 0.08, amp: 108 }
+      ];
+      for (const b of this.blobs) { b.x = 0; b.y = 0; }
+    }
+    for (const b of this.blobs) {
+      const el = this[b.el];
+      if (!el) continue;
+      const tx = nx * b.pull * b.sx + Math.sin(t * b.sp + b.ph) * b.amp;
+      const ty = ny * b.pull * b.sy + Math.cos(t * b.sp * 1.27 + b.ph) * b.amp * 0.78;
+      b.x += (tx - b.x) * b.lag;
+      b.y += (ty - b.y) * b.lag;
+      const sc = 1 + Math.sin(t * b.sp * 1.6 + b.ph) * 0.13;
+      el.style.transform = "translate3d(" + b.x.toFixed(1) + "px," + b.y.toFixed(1) + "px,0) scale(" + sc.toFixed(3) + ")";
+    }
+  }
+
+  bindAway() {
+    if (this._awayBound) return;
+    this._awayBound = 1;
+    this.onAway = e => {
+      if (!this.state.colOpen) return;
+      const t = e.target;
+      if (t && t.closest) {
+        if (this.colMenuEl && this.colMenuEl.contains(t)) return;
+        if (t.closest("[data-coltrigger]")) return;
+      }
+      this.setState({ colOpen: false });
+    };
+    this.onAwayScroll = () => { if (this.state.colOpen) this.setState({ colOpen: false }); };
+    window.addEventListener("pointerdown", this.onAway, true);
+    window.addEventListener("click", this.onAway, true);
+    window.addEventListener("wheel", this.onAwayScroll, { passive: true });
+  }
+
+  bindToggleHover(el, which) {
+    if (!el) return;
+    this[which === "sphere" ? "sphereBtnEl" : "galleryBtnEl"] = el;
+    if (!el.__hoverBound) {
+      el.__hoverBound = 1;
+      el.addEventListener("pointerenter", () => { el.__hover = 1; this.paintToggle(); });
+      el.addEventListener("pointerleave", () => { el.__hover = 0; this.paintToggle(); });
+    }
+    this.paintToggle();
+  }
+
+  paintToggle() {
+    const holo = "linear-gradient(100deg, #ffd6e8 0%, #d9f2ff 14%, #d8ffe4 28%, #fff6cf 42%, #ffd9f4 56%, #d5e4ff 70%, #ccfff2 84%, #ffd6e8 100%)";
+    const paint = (el, which) => {
+      if (!el) return;
+      const active = this.view === which;
+      el.style.background = active ? holo : (el.__hover ? "rgba(20,23,26,.06)" : "transparent");
+      el.style.backgroundSize = active ? "300% 100%" : "auto";
+      el.style.color = (active || el.__hover) ? "#14171a" : "rgba(20,23,26,.5)";
+      el.style.boxShadow = active ? "inset 0 0 0 1px rgba(255,255,255,.7)" : "none";
+      el.style.animation = active ? "holoSlide 5s linear infinite" : "none";
+    };
+    paint(this.sphereBtnEl, "sphere");
+    paint(this.galleryBtnEl, "gallery");
+  }
+
+  markTitleOverflow() {
+    if (!this.lbTitleEl || !this.lbTitleWrapEl || !this.lbTitleFadeEl) return;
+    const over = this.lbTitleEl.scrollWidth - this.lbTitleWrapEl.clientWidth;
+    this.lbTitleFadeEl.style.opacity = over > 4 ? "1" : "0";
+    this.lbTitleWrapEl.style.cursor = over > 4 ? "e-resize" : "";
+  }
+
+  syncLb() {
+    const i = this.state.lb;
+    if (i < 0) return;
+    const all = this.workData();
+    const w = all[i];
+    if (!w) return;
+    const vis = this.vis || this.visible();
+    const pos = vis.indexOf(i);
+    if (this.lbImgEl) this.lbImgEl.src = w.src;
+    if (this.lbCollectionEl) this.lbCollectionEl.textContent = w.collection;
+    if (this.lbTitleEl) {
+      this.lbTitleEl.textContent = w.title;
+      this.lbTitleEl.style.transitionDuration = "0s";
+      this.lbTitleEl.style.transform = "none";
+      requestAnimationFrame(() => this.markTitleOverflow());
+    }
+    if (this.lbSizeEl) this.lbSizeEl.textContent = w.size;
+    if (this.lbExcerptEl) {
+      const MAX = 180;
+      const full = w.excerpt || "";
+      this.lbExcerptEl.textContent = full.length > MAX ? full.slice(0, MAX).replace(/\s+\S*$/, "") + "…" : full;
+    }
+    const gone = this.isSold(w);
+    if (this.lbOrigPriceEl) {
+      this.lbOrigPriceEl.textContent = gone ? "Sold" : "$" + w.price.toLocaleString("en-US");
+      this.lbOrigPriceEl.style.color = gone ? "rgba(20,23,26,.45)" : "#14171a";
+    }
+    if (this.lbOrigStatusEl) {
+      this.lbOrigStatusEl.textContent = gone ? "Sold" : "Available";
+      this.lbOrigStatusEl.style.color = gone ? "rgba(20,23,26,.45)" : "#2ea060";
+    }
+    if (this.lbOrigBtnEl) {
+      this.lbOrigBtnEl.textContent = gone ? "Sold" : "Buy now";
+      this.lbOrigBtnEl.style.background = gone ? "rgba(20,23,26,.12)" : "#14171a";
+      this.lbOrigBtnEl.style.color = gone ? "rgba(20,23,26,.45)" : "#f5f3ef";
+      this.lbOrigBtnEl.style.pointerEvents = gone ? "none" : "auto";
+    }
+    /* A sold original kept its holographic wash at full brightness, which is
+       the loudest thing in the panel — it read as the available one. Dim the
+       wash and mute the price to match the button, the same way a sold-out
+       finish chip dims. */
+    this._origGone = gone;
+    if (this.holoSpinEl) this.holoSpinEl.style.opacity = gone ? ".14" : ".62";
+    if (this.lbOrigPriceEl) this.lbOrigPriceEl.style.color = gone ? "rgba(20,23,26,.4)" : "#14171a";
+    if (this.lbPrintPriceEl) this.lbPrintPriceEl.textContent = "$" + this.printTotal(w).toLocaleString("en-US");
+    if (this.lbEditionEl) this.lbEditionEl.textContent = "Edition of " + w.edition;
+    if (this.lbPrintLeftEl) this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
+    this.syncPrint();
+
+    /* --- Store data + buy buttons ----------------------------------------- */
+    if (this.lbOrigPriceEl && w.priceText) this.lbOrigPriceEl.textContent = w.priceText;
+    if (this.lbSizeEl) {
+      this.lbSizeEl.textContent = w.size || "";
+      /* Wix carries no per-artwork dimensions, so drop the whole row rather
+         than leave a "Dimensions" label with nothing beside it. */
+      const row = this.lbSizeEl.parentElement;
+      if (row) row.style.display = w.size ? "flex" : "none";
+    }
+    /* Wix carries no edition size or remaining count per artwork, so these are
+       usually empty. Hide them rather than leave an empty cell in a
+       space-between row, which drags the labels out of alignment. */
+    if (this.lbEditionEl) {
+      this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
+      this.lbEditionEl.style.display = w.edition ? "" : "none";
+    }
+    if (this.lbPrintLeftEl) {
+      this.lbPrintLeftEl.textContent = w.left ? (w.left + " left") : "";
+      this.lbPrintLeftEl.style.display = w.left ? "" : "none";
+    }
+
+    const hasPrints = w.prints && Object.keys(w.prints).length;
+    if (this.printCardEl) this.printCardEl.style.display = hasPrints ? "flex" : "none";
+    if (this.lbPrintPriceEl && hasPrints) {
+      const cp = this.currentPrint();
+      if (cp && cp.priceText) this.lbPrintPriceEl.textContent = cp.priceText;
+    }
+
+    const wire = (el, kind) => {
+      if (!el || el.__agBound) return;
+      el.__agBound = 1;
+      el.addEventListener("click", ev => {
+        ev.preventDefault();
+        const cur = this.workData()[this.state.lb];
+        if (!cur || !window.AGWix) return;
+
+        /* Standalone there is no Wix cart to talk to, so send the buyer to
+           the product page instead of leaving the button spinning. */
+        if (!this.liveCatalog()) {
+          window.AGWix.openProduct(cur.slug, cur.url);
+          return;
+        }
+
+        let variantId = null;
+        if (kind === "orig") variantId = cur.origVariantId;
+        else { const pr = this.currentPrint(); variantId = pr && pr.variantId; }
+        if (!variantId) {
+          console.error("[gallery] no variantId for", kind, cur.title,
+                        "— origVariantId:", cur.origVariantId,
+                        "prints:", cur.prints);
+          const lbl = el.textContent;
+          el.textContent = "Unavailable";
+          setTimeout(() => { el.textContent = lbl; }, 2500);
+          return;
+        }
+        window.AGWix.addToCart(cur.id, variantId, el.textContent, el);
+      });
+    };
+    wire(this.lbOrigBtnEl, "orig");
+    wire(this.lbPrintBtnEl, "print");
+
+    if (this.lbStripEl) {
+      const btns = this.lbStripEl.querySelectorAll("[data-thumb]");
+      btns.forEach((b, k) => {
+        const im = b.firstElementChild;
+        if (!im) return;
+        const inCol = vis.indexOf(k) >= 0;
+        const on = k === i;
+        b.style.display = inCol ? "block" : "none";
+        im.style.opacity = on ? "1" : ".4";
+        im.style.filter = on ? "none" : "grayscale(.45)";
+        im.style.transform = on ? "translateY(-5px)" : "none";
+        im.style.boxShadow = on ? "0 0 0 1px rgba(20,23,26,.7)" : "none";
+      });
+      const act = btns[i];
+      if (act) this.lbStripEl.scrollTo({ left: act.offsetLeft - this.lbStripEl.clientWidth / 2 + act.offsetWidth / 2, behavior: "smooth" });
+    }
+  }
+
+  syncPrint() {
+    const card = this.printCardEl;
+    if (!card) return;
+    const st = this.state;
+
+    const paper = this.paperData()[st.paper] || this.paperData()[0];
+    /* Keep the selection on something the store can actually sell: a finish
+       that sold out, or one this artwork doesn't offer, falls back to the
+       first available finish. */
+    const finishes = this.paperData();
+    if (finishes.length) {
+      const bad = st.paper >= finishes.length || (finishes[st.paper] && finishes[st.paper].inStock === false);
+      if (bad) {
+        const k = finishes.findIndex(p => p.inStock !== false);
+        const next = k < 0 ? 0 : k;
+        if (next !== st.paper) { this.setState({ paper: next }); return; }
+      }
+    }
+    if (this.paperMenuEl) {
+      const data = this.paperData();
+      this.paperMenuEl.querySelectorAll("[data-paper]").forEach((b, k) => {
+        const sel = k === st.paper;
+        const stocked = !data[k] || data[k].inStock !== false;
+        b.style.background = sel ? "#14171a" : "rgba(255,255,255,.72)";
+        b.style.borderColor = sel ? "#14171a" : "rgba(20,23,26,.18)";
+        b.style.opacity = stocked ? "1" : ".45";
+        b.style.cursor = stocked ? "pointer" : "not-allowed";
+        b.disabled = !stocked;
+        b.querySelectorAll("[data-pp-label],[data-pp-note],[data-pp-delta]").forEach((s, i) => {
+          s.style.color = sel ? (i === 0 ? "#f5f3ef" : "rgba(245,243,239,.62)") : (i === 0 ? "#14171a" : "rgba(20,23,26,.5)");
+        });
+      });
+    }
+
+    const w = this.workData()[this.state.lb];
+    const cp = this.currentPrint();
+    /* Wix formats its own prices; fall back to the local sum only when there
+       is no live variant to read. */
+    if (this.lbPrintPriceEl && w) {
+      this.lbPrintPriceEl.textContent = (cp && cp.priceText)
+        ? cp.priceText
+        : "$" + this.printTotal(w).toLocaleString("en-US");
+    }
+    if (this.lbPrintBtnEl) {
+      const gone = cp ? cp.inStock === false : false;
+      const missing = this.liveCatalog() && cp && !cp.variantId;
+      this.lbPrintBtnEl.textContent = gone ? "Sold out" : (missing ? "Unavailable" : "Buy print");
+      this.lbPrintBtnEl.style.opacity = (gone || missing) ? ".4" : "1";
+      this.lbPrintBtnEl.style.pointerEvents = (gone || missing) ? "none" : "auto";
+    }
+    /* Remaining count follows the chosen finish, since Wix tracks inventory
+       per variant. Untracked finishes report nothing and the label goes away
+       rather than showing a made-up number. */
+    if (this.lbPrintLeftEl) {
+      const sel = this.paperData()[this.state.paper];
+      const left = (sel && typeof sel.left === "number" && sel.left) || (w && !sel ? w.left : 0);
+      this.lbPrintLeftEl.textContent = left ? (left + " left") : "";
+      this.lbPrintLeftEl.style.display = left ? "" : "none";
+    }
+  }
+
+  step(d, target) {
+    const vis = this.vis || this.visible();
+    if (!vis.length) return;
+    if (this.lbFrameEl) {
+      const el = this.lbFrameEl;
+      el.style.animation = "none";
+      void el.offsetWidth;
+      el.style.animation = (d > 0 ? "swapNext" : "swapPrev") + " .55s cubic-bezier(.2,.75,.2,1) both";
+    }
+    if (typeof target === "number") { this.setState({ lb: target }); return; }
+    const cur = vis.indexOf(this.state.lb);
+    const next = vis[((cur < 0 ? 0 : cur) + d + vis.length) % vis.length];
+    this.setState({ lb: next });
+  }
+
+  startDust(which) {
+    const inLoader = which === "loader";
+    const front = which === "front";
+    const cv = inLoader ? this.loaderDustEl : (front ? this.sphereDustFrontEl : this.sphereDustEl);
+    if (!cv) { requestAnimationFrame(() => this.startDust(which)); return; }
+    const ctx = cv.getContext("2d");
+    const dpr = Math.min(devicePixelRatio || 1, inLoader ? 2 : 1.5);
+    const sprites = [];
+    const TINTS = inLoader
+      ? [[255,255,255],[255,222,236],[214,232,255],[220,255,236],[255,244,214],[236,222,255]]
+      : [[255,214,236],[206,232,255],[214,255,232],[255,246,214],[238,220,255],[255,232,216]];
+    for (let ti = 0; ti < TINTS.length; ti++) {
+      const S = 64;
+      const sprite = document.createElement("canvas");
+      sprite.width = sprite.height = S;
+      const sc = sprite.getContext("2d");
+      const g = sc.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+      const C = TINTS[ti].join(",");
+      if (inLoader) {
+        g.addColorStop(0, "rgba(" + C + ",1)");
+        g.addColorStop(0.28, "rgba(" + C + ",.72)");
+        g.addColorStop(0.62, "rgba(" + C + ",.2)");
+        g.addColorStop(1, "rgba(" + C + ",0)");
+      } else {
+        g.addColorStop(0, "rgba(" + C + ",.5)");
+        g.addColorStop(0.55, "rgba(" + C + ",.62)");
+        g.addColorStop(0.82, "rgba(" + C + ",.95)");
+        g.addColorStop(0.93, "rgba(" + C + ",.42)");
+        g.addColorStop(1, "rgba(" + C + ",0)");
+      }
+      sc.fillStyle = g;
+      sc.beginPath();
+      sc.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+      sc.fill();
+      const rim = sc.createRadialGradient(S / 2, S / 2, S * 0.06, S / 2, S / 2, S * 0.3);
+      const R = TINTS[ti].join(",");
+      rim.addColorStop(0, "rgba(" + R + ",0)");
+      rim.addColorStop(0.72, "rgba(" + R + "," + (inLoader ? ".16" : ".3") + ")");
+      rim.addColorStop(1, "rgba(" + R + ",0)");
+      sc.fillStyle = rim;
+      sc.beginPath();
+      sc.arc(S / 2, S / 2, S * 0.3, 0, Math.PI * 2);
+      sc.fill();
+      sprites.push(sprite);
+    }
+    const size = () => { cv.width = Math.max(1, Math.round(cv.clientWidth * dpr)); cv.height = Math.max(1, Math.round(cv.clientHeight * dpr)); };
+    size();
+    const small = Math.min(innerWidth, innerHeight) < 760;
+    /* The loader's count has to be decided before the `small` branch, not
+       after it: phones were falling into the ambient-dust case and drawing 26
+       particles instead of thousands, so the wordmark never had enough points
+       to read as a wordmark. The ambient sphere dust stays sparse on mobile —
+       that is a deliberate cost saving — but the loader is a two-second
+       set piece and can afford the particles. */
+    const N = inLoader
+      ? (small ? 2400 : 3600)
+      : (small ? (front ? 10 : 26) : (front ? 18 : 48)), D = 1400;
+    const P = [];
+    for (let i = 0; i < N; i++) {
+      P.push({ a: Math.random() * Math.PI * 2, r: 90 + Math.pow(Math.random(), .7) * 1500, y: (Math.random() - 0.5) * 2400, s: 0.18 + Math.random() * 0.62, vy: (Math.random() - 0.5) * 0.2, w: 0.012 + Math.random() * 0.05,
+        hue: Math.floor(Math.random() * 6), nx: Math.random(), ny: Math.random(), d: Math.pow(Math.random(), .8), ph: Math.random() * Math.PI * 2, vx2: (Math.random() - .5) * 3.4, vy2: -0.3 - Math.random() * 2.6, sw: 0.4 + Math.random() * 2.6 });
+    }
+    const t0 = performance.now();
+    if (inLoader) this.buildWordTargets(dpr);
+    const loop = () => {
+      if (this.token !== window.__galToken) return;
+      requestAnimationFrame(loop);
+      if (Math.max(1, Math.round(cv.clientWidth * dpr)) !== cv.width) size();
+      /* Keep asking until the wordmark targets exist. buildWordTargets used to
+         get a single attempt, taken before the logo had necessarily decoded or
+         been laid out; if that attempt bailed, the particles never formed the
+         wordmark at all and the loader was just drifting dust. It no-ops once
+         the points are built. */
+      if (inLoader && !this.wordPts) this.buildWordTargets(dpr);
+      const w = cv.width, h = cv.height;
+      ctx.clearRect(0, 0, w, h);
+      const fade = inLoader ? 1 : Math.max(0, 1 - (this.wW || 0) * 1.6);
+      const t = (performance.now() - t0) / 1000;
+      const ink = inLoader ? "244,242,238" : "20,23,26";
+      const bass = 0;
+      const mxp = this.mx == null ? null : this.mx * dpr;
+      const myp = this.my == null ? null : this.my * dpr;
+      const Rpush = (inLoader ? 340 : 300) * dpr;
+      {
+        const drift = inLoader ? t * 40 * dpr : 0;
+        let i2 = -1;
+        for (const p of P) {
+          i2++;
+          const depth = 0.16 + Math.pow(p.d, 1.7) * 2.1;
+          p.nx += (p.vx2 * depth) / 3400;
+          p.ny += (p.vy2 * depth) / 3400;
+          if (p.ny < -0.08) { p.ny = 1.08; p.nx = Math.random(); }
+          if (p.nx < -0.08) p.nx = 1.08;
+          if (p.nx > 1.08) p.nx = -0.08;
+          let sx = ((p.nx + 1) % 1) * w + Math.sin(t * 0.34 * p.sw + p.ph) * 68 * depth * dpr - drift;
+          let sy = ((p.ny + 1) % 1) * h + Math.cos(t * 0.27 * p.sw + p.ph) * 46 * depth * dpr;
+          sx = ((sx % w) + w) % w;
+          p.ox = p.ox || 0; p.oy = p.oy || 0;
+          if (mxp != null) {
+            const dx = sx + p.ox - mxp, dy = sy + p.oy - myp;
+            const dd = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (dd < Rpush) {
+              const f = 1 - dd / Rpush;
+              const pull = -f * (inLoader ? 2.6 : 3.4) * depth;
+              p.ox += (dx / dd) * pull;
+              p.oy += (dy / dd) * pull;
+            }
+          }
+          const damp = 0.955;
+          p.ox *= damp; p.oy *= damp;
+          if (inLoader && this.wordPts) {
+            if (p.wi === undefined) { const tot = this.wordPts.length / 2; p.wi = 2 * Math.min(tot - 1, Math.floor((i2 / P.length) * tot)); }
+            if (p.lag === undefined) p.lag = Math.random() * 0.42;
+            const raw = (performance.now() - this.wordStart) / 3200;
+            const g = Math.max(0, Math.min(1, (raw - p.lag) / (1 - p.lag)));
+            const e = g < 0.5 ? 4 * g * g * g : 1 - Math.pow(-2 * g + 2, 3) / 2;
+            const settle = Math.max(0, (raw - 1) / 0.55);
+            const jr = Math.max(0, 1 - Math.min(1, settle)) * 2.2;
+            const jx = Math.sin(p.ph * 5.1 + raw * 2) * jr * dpr, jy = Math.cos(p.ph * 3.7 + raw * 2) * jr * dpr;
+            sx += (this.wordPts[p.wi] + jx - sx) * e;
+            sy += (this.wordPts[p.wi + 1] + jy - sy) * e;
+            p.lit = e;
+            if (raw > 1.12 && !this._wordLit) {
+              this._wordLit = 1;
+              this.wordDoneAt = performance.now();
+              if (this.loaderLogoEl) this.loaderLogoEl.style.opacity = "1";
+            }
+          }
+          sx += p.ox + Math.cos(p.ph * 3.1) * bass * 24 * dpr;
+          sy += p.oy + Math.sin(p.ph * 2.3) * bass * 24 * dpr;
+          const gr = inLoader
+            ? (0.6 + (1 - p.d) * 3.1) * dpr * (this.wordPts ? 0.62 : 0.5) * (0.6 + p.s)
+            : (2 + Math.pow(p.s, 2.2) * 26) * dpr * (front ? 1.5 : 1);
+          ctx.globalAlpha = Math.max(0, Math.min(1, (inLoader ? ((0.16 + p.d * 0.42) * (1 + (p.lit || 0) * 2.4) * (this._wordLit ? Math.max(0, 1 - Math.pow(Math.min(1, (performance.now() - this.wordDoneAt) / 1500), 1.6)) : 1)) : (front ? (0.1 + p.d * 0.16) : (0.14 + p.d * 0.24))) * fade));
+          ctx.drawImage(sprites[p.hue], sx - gr, sy - gr, gr * 2, gr * 2);
+          ctx.globalAlpha = 1;
+        }
+      }
+    };
+    loop();
+  }
+
+  buildLights(n) {
+    if (!this.lightsEl || this.lightsBuilt === n) return;
+    this.lightsBuilt = n;
+    this.lightsEl.innerHTML = "";
+    this.coneNodes = [];
+    for (let i = 0; i < n; i++) {
+      const cone = document.createElement("div");
+      cone.style.cssText = "position:absolute;top:-14%;left:0;width:760px;height:104%;margin-left:-380px;transform-origin:50% 0;pointer-events:none;opacity:0;"
+        + "background:radial-gradient(40% 46% at 50% 16%, rgba(255,253,246,.98) 0%, rgba(255,251,238,.7) 26%, rgba(255,249,232,.34) 48%, rgba(255,248,230,.1) 70%, rgba(255,248,230,0) 88%);"
+        + "filter:blur(34px);mix-blend-mode:screen;";
+      this.lightsEl.appendChild(cone);
+      this.coneNodes.push(cone);
+    }
+  }
+
+  tick = () => {
+    if (this.token !== window.__galToken) return;
+    requestAnimationFrame(this.tick);
+    if (!this._imgsDone) this.hydrateImgs();
+    try { this.frame(); } catch (e) { if (!this._logged) { this._logged = 1; console.error("frame error", e); } }
+  };
+
+  frame() {
+    const el = this.stageEl;
+    if (!el) return;
+    const nodes = el.querySelectorAll("[data-work]");
+    if (!nodes.length) return;
+    const vis = this.vis || this.visible();
+    const visPos = this.visPos || {};
+    const N = vis.length;
+    if (!N) return;
+    const w = el.clientWidth;
+    /* Compose against the part of the frame the visitor can actually see. On a
+       free Wix site the banner pushes our bottom edge past the fold, and
+       centring on the full frame height drops the artwork below the window.
+       AGWix.bottomCut is that overhang, measured against the real viewport. */
+    const cut = (window.AGWix && window.AGWix.bottomCut) || 0;
+    const h = Math.max(240, el.clientHeight - cut);
+    const mn = Math.min(w, h), narrow = w < 760;
+    const t = (performance.now() - this.t0) / 1000;
+    const ease = x => 1 - Math.pow(1 - x, 3);
+
+    if (!this.loaded && !this.wordPts && this.markEl && this.loaderMarkEl) {
+      const mr = this.markEl.getBoundingClientRect();
+      if (mr.width > 20) {
+        this.loaderMarkEl.style.left = mr.left + "px";
+        this.loaderMarkEl.style.top = mr.top + "px";
+        this.loaderMarkEl.style.width = mr.width + "px";
+      }
+    }
+    if (!this.loaded) {
+      const gp = this.wordStart ? Math.min(1, (performance.now() - this.wordStart) / 3200) : 0;
+      const n = Math.round(Math.max(Math.min(1, t / 4), gp) * 100);
+      if (this.pctEl) this.pctEl.textContent = String(n).padStart(3, "0");
+      if (this.barEl) this.barEl.style.width = n + "%";
+      if (this.meterEl) this.meterEl.style.opacity = t > 0.4 ? "1" : "0";
+      if (!this.wordDone && this._wordLit) this.wordDone = performance.now();
+      /* Hold on the assembled wordmark long enough to actually read it. The
+         logo fades in over .5s once the particles land, so 2.6s leaves ~2s of
+         crisp logo before the loader clears — it used to be ~1s, most of it
+         still fading. */
+      const held = this.wordDone ? performance.now() - this.wordDone > 2600 : t > 9;
+      if (n >= 100 && held) {
+        this.loaded = true;
+        if (this.loaderEl) {
+          this.loaderEl.style.opacity = "0";
+          this.loaderEl.style.pointerEvents = "none";
+          setTimeout(() => { if (this.loaderEl) this.loaderEl.style.visibility = "hidden"; }, 1000);
+        }
+      }
+    }
+
+    const R = narrow ? mn * 0.92 : mn * 1.12;
+    const fitS = narrow ? mn / 620 : mn / 840;
+    const f = narrow ? 1500 : 1750;
+
+    /* A vertical drag tumbles the sphere on X, deliberately unclamped — the
+       old ±0.9rad limit meant it only tilted, so pieces near the poles never
+       rotated to the front. Tumbling alone isn't enough either: it holds every
+       piece at a fixed horizontal offset, leaving ones far left or right
+       unable to reach the centre (one of eleven, measured). Precessing the yaw
+       a quarter turn per tumble sweeps those through too, so the whole
+       catalogue is reachable. See tools/test-sphere.mjs. */
+    this.rotX += this.velX;
+    this.rotY += this.velY + this.velX * 0.25;
+    this.rotX %= Math.PI * 2;
+    this.velY *= 0.965; this.velX *= 0.96;
+    const v = this.view;
+    if (v === "sphere" && this.props.idleSpin !== false) this.rotY += 0.00018;
+    this.pulse = 1;
+
+    const gap = narrow ? w * 0.96 : mn * 0.9, fG = 1700;
+    this.gap = gap;
+    const total = N * gap;
+
+    if (this.panTarget != null) {
+      this.pan += (this.panTarget - this.pan) * 0.14;
+      this.panVel = 0;
+      if (Math.abs(this.panTarget - this.pan) < 0.5) { this.pan = this.panTarget; this.panTarget = null; }
+    } else {
+      this.pan += this.panVel; this.panVel *= 0.9;
+      if (v === "gallery" && !this.drag && Math.abs(this.panVel) < gap * 0.02) {
+        const snap = Math.round(this.pan / gap) * gap;
+        this.pan += (snap - this.pan) * 0.11;
+        if (Math.abs(snap - this.pan) < 0.4) { this.pan = snap; this.panVel = 0; }
+      }
+    }
+    const panW = ((this.pan % total) + total) % total;
+
+    this.wS += ((v === "sphere" ? 1 : 0) - this.wS) * 0.07;
+    this.wW += ((v === "gallery" ? 1 : 0) - this.wW) * 0.07;
+    const wS = this.wS, m = this.wW;
+    if (this.wallEl) this.wallEl.style.opacity = m.toFixed(3);
+    if (this.washEl) this.washEl.style.opacity = (1 - m).toFixed(3);
+    this.flowBlobs();
+    if (this._paintedView !== this.view) { this._paintedView = this.view; this.paintToggle(); }
+
+
+    const d = m;
+    if (this.markEl) {
+      const mw = this.markEl.offsetWidth || 700;
+      const wordEl = this.markWordEl;
+      const wordW = wordEl ? wordEl.offsetWidth : mw;
+      const wordMidY = wordEl ? wordEl.offsetTop + wordEl.offsetHeight / 2 : 52;
+      const big = Math.min(1, (w * (narrow ? 0.86 : 0.62)) / wordW);
+      const small = narrow ? 0.19 : 0.23;
+      const sc = big + (small - big) * d;
+      const tx = (w / 2 - this.markEl.offsetLeft - (wordW * big) / 2) * (1 - d);
+      const ty = (h / 2 - this.markEl.offsetTop - wordMidY * big) * (1 - d);
+      const tr = "translate(" + tx.toFixed(1) + "px," + ty.toFixed(1) + "px) scale(" + sc.toFixed(3) + ")";
+      this.markEl.style.transform = tr;
+      this.markEl.style.zIndex = d > 0.5 ? "3000" : "1000";
+      this.markEl.style.opacity = Math.max(0, Math.min(1, 1 - (d - 0.45) / 0.35)).toFixed(3);
+      if (this.markWordEl) {
+        const px = this.mx == null ? 0.5 : this.mx / w;
+        const py = this.my == null ? 0.5 : this.my / h;
+        this.mtY = (this.mtY || 0) + (((px - 0.5) * 14 * wS) - (this.mtY || 0)) * 0.07;
+        this.mtX = (this.mtX || 0) + (((0.5 - py) * 9 * wS) - (this.mtX || 0)) * 0.07;
+        this.markWordEl.style.transform = "rotateY(" + this.mtY.toFixed(2) + "deg) rotateX(" + this.mtX.toFixed(2) + "deg)";
+      }
+      if (this.markSubEl) {
+        this.markSubEl.style.opacity = Math.max(0, 1 - d * 1.6).toFixed(3);
+        this.markSubEl.style.height = (1 - d) * 20 + "px";
+      }
+    }
+    const chromeIn = Math.min(1, Math.max(0, (t - 2.1) / 0.9));
+    if (this.chromeTopEl) this.chromeTopEl.style.opacity = chromeIn.toFixed(3);
+    if (this.chromeBottomEl) this.chromeBottomEl.style.opacity = chromeIn.toFixed(3);
+    if (this.hintEl) this.hintEl.textContent = v === "gallery" ? "Scroll to walk the wall" : "Drag to orbit · click to open";
+    if (this.counterEl) {
+      if (v === "gallery") {
+        const c = ((Math.round(this.pan / gap) % N) + N) % N;
+        this.counterEl.textContent = String(c + 1).padStart(2, "0") + " / " + String(N).padStart(2, "0");
+      } else this.counterEl.textContent = N + (N === 1 ? " work" : " works");
+    }
+
+    const GA = Math.PI * (3 - Math.sqrt(5));
+    const cosX = Math.cos(this.rotX), sinX = Math.sin(this.rotX);
+    if (m > 0.02) this.buildLights(nodes.length);
+
+    for (let k = 0; k < nodes.length; k++) {
+      const node = nodes[k];
+      const j = visPos[k];
+      if (j === undefined) {
+        node.style.opacity = "0";
+        node.style.pointerEvents = "none";
+        continue;
+      }
+
+
+      const yUnit = N > 1 ? (1 - (j / (N - 1)) * 2) * 0.97 : 0;
+      const phi = Math.acos(yUnit);
+      const a = j * GA + this.rotY;
+      let sx = R * Math.sin(phi) * Math.cos(a);
+      let sy = R * 0.95 * Math.cos(phi);
+      let sz = R * Math.sin(phi) * Math.sin(a);
+      const sy2 = sy * cosX - sz * sinX, sz2 = sy * sinX + sz * cosX;
+      sy = sy2; sz = sz2;
+      const ph = j * 1.7;
+      const persp = f / (f - sz);
+      const sScreenX = w / 2 + (sx + Math.cos(t * 0.42 + ph * 0.8) * 16) * persp;
+      const sScreenY = h / 2 + (sy + Math.sin(t * 0.56 + ph) * 22) * persp;
+      const sScale = persp * fitS;
+      const depth = (sz + R) / (2 * R);
+
+      let gx = j * gap - panW;
+      if (gx < -total / 2) gx += total;
+      if (gx > total / 2) gx -= total;
+      const bend = Math.pow(Math.min(1, Math.abs(gx) / (w * 0.95)), 2) * mn * 0.5;
+      const perspG = fG / (fG + bend);
+      const gScreenX = w / 2 + gx * perspG;
+      const gScreenY = h * 0.47;
+      const gScale = perspG * (narrow ? mn / 460 : mn / 640);
+      const off = Math.min(1, Math.abs(gx) / (w * 0.8));
+
+      const intro = Math.min(1, Math.max(0, (t - 1.5 - j * 0.04) / 1.1));
+      const ei = ease(intro);
+      let px = (sScreenX * wS + gScreenX * m - w / 2) * ei + w / 2;
+      let py = (sScreenY * wS + gScreenY * m - h / 2) * ei + h / 2;
+      const scale = (sScale * wS + gScale * m) * (0.24 + 0.76 * ei);
+
+      const lean = ((j * 47) % 13 - 6) * 1.1;
+      const yawLag = Math.max(-24, Math.min(24, -this.velY * 2400));
+      let tiltY = wS * (lean + yawLag + Math.sin(t * 0.26 + ph) * 3) + m * (-gx / w * 16);
+      let tiltX = wS * (((j * 29) % 9 - 4) * 0.9 + Math.cos(t * 0.2 + ph * 1.2) * 2.6);
+      const spinZ = wS * ((j * 17) % 7 - 3) * 0.9;
+
+      if (this.mx != null && ei > 0.5 && wS > 0.5 && this.props.lookAt !== false) {
+        const dxm = Math.max(-1, Math.min(1, (this.mx - px) / (w * 0.42)));
+        const dym = Math.max(-1, Math.min(1, (this.my - py) / (h * 0.42)));
+        const near = 1 - Math.min(1, Math.hypot(this.mx - px, this.my - py) / (mn * 1.1));
+        const kk = (0.35 + 0.65 * near);
+        tiltY += dxm * 13 * kk;
+        tiltX += -dym * 9 * kk;
+        px += dxm * 7 * kk;
+        py += dym * 5 * kk;
+      }
+
+      node.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
+        + " perspective(1600px) rotateY(" + tiltY.toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
+        + " scale(" + scale.toFixed(3) + ")";
+      const opS = 0.42 + 0.58 * depth;
+      const opG = 1 - off * 0.3;
+      node.style.opacity = ((opS * wS + opG * m) * ei).toFixed(3);
+      node.style.zIndex = String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
+      node.style.pointerEvents = (m > 0.5 || depth > 0.52) ? "auto" : "none";
+
+      const glass = node.lastElementChild;
+      const imgEl = node.firstElementChild;
+      if (m > 0.5) {
+        node.style.background = "linear-gradient(160deg, #3c3d42 0%, #202126 26%, #131417 58%, #26272c 100%)";
+        node.style.padding = "14px";
+        node.style.borderRadius = "1px";
+        node.style.boxShadow = [
+          "0 " + (46 * perspG).toFixed(0) + "px " + (58 * perspG).toFixed(0) + "px -" + (32 * perspG).toFixed(0) + "px rgba(20,23,26,.55)",
+          "inset 0 1px 0 rgba(255,255,255,.24)",
+          "inset 0 -1px 0 rgba(0,0,0,.55)",
+          "0 0 0 1px rgba(20,23,26,.28)"
+        ].join(", ");
+        if (imgEl && imgEl.tagName === "IMG") {
+          imgEl.style.border = "11px solid #fbfaf8";
+          imgEl.style.boxSizing = "border-box";
+          imgEl.style.boxShadow = "0 0 0 1px rgba(20,23,26,.16)";
+        }
+        const wq = Math.round(off * 8) / 8;
+        const wkey = "w" + wq;
+        if (node.__fk !== wkey) {
+          node.__fk = wkey;
+          node.style.filter = "brightness(" + (1.04 - wq * 0.22).toFixed(3) + ")" + (wq > 0.05 ? " blur(" + (wq * 1.4).toFixed(2) + "px)" : "");
+        }
+        if (glass) glass.style.opacity = (0.45 * (1 - off * 0.4)).toFixed(3);
+      } else {
+        node.style.background = "transparent";
+        node.style.padding = "0";
+        node.style.boxShadow = "none";
+        node.style.borderRadius = "0";
+        if (imgEl && imgEl.tagName === "IMG") { imgEl.style.border = "0"; imgEl.style.boxShadow = "none"; imgEl.style.boxSizing = "content-box"; }
+        const back = Math.max(0, 1 - depth);
+        const bq = Math.round(back * back * 3.4 * wS * 2) / 2;
+        const fq = Math.round(depth * 8) / 8;
+        const key = bq + "|" + fq;
+        if (node.__fk !== key) {
+          node.__fk = key;
+          node.style.filter = "drop-shadow(0 14px 28px rgba(20,23,26," + (0.1 + 0.14 * fq).toFixed(2) + "))"
+            + (bq > 0 ? " blur(" + bq + "px)" : "");
+        }
+        if (glass) glass.style.opacity = "0";
+      }
+
+      if (this.coneNodes && this.coneNodes[k]) {
+        const cone = this.coneNodes[k];
+        cone.style.opacity = ((m > 0.05 && off < 1) ? (1 - off * 0.45) * m : 0).toFixed(3);
+        cone.style.transform = "translateX(" + gScreenX.toFixed(1) + "px) scale(" + (perspG * 1.1).toFixed(3) + "," + perspG.toFixed(3) + ")";
+      }
+    }
+  }
+
+  renderVals() {
+    const v = this.view;
+    const base = "appearance:none;border:0;cursor:pointer;font:inherit;font-size:9px;letter-spacing:.2em;text-transform:uppercase;height:32px;padding:0 17px;border-radius:999px;transition:color .3s ease,background .3s ease;";
+    const on = base + "color:#14171a;background:conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg);box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);animation:holoHue 9s linear infinite;";
+    const off = base + "color:rgba(20,23,26,.5);background:transparent;";
+
+    return {
+      works: this.workData().map(w => ({ i: w.i, src: w.src })),
+      collections: this.collectionData().map((c, i) => ({
+        i, label: c.label,
+        count: c.key === "all" ? this.workData().length : this.workData().filter(w => w.colKey === c.key).length
+      })),
+      stage: el => { this.stageEl = el; },
+      wall: el => { this.wallEl = el; },
+      wash: el => { this.washEl = el; },
+      lights: el => { this.lightsEl = el; this.lightsBuilt = -1; },
+      mark: el => { this.markEl = el; },
+      markWord: el => { this.markWordEl = el; },
+      markBold: el => { this.markBoldEl = el; },
+      markSub: el => { this.markSubEl = el; },
+      loaderMark: el => { this.loaderMarkEl = el; },
+      loaderLogo: el => { this.loaderLogoEl = el; },
+      chromeTop: el => { this.chromeTopEl = el; },
+      chromeBottom: el => { this.chromeBottomEl = el; },
+      colLabel: el => { this.colLabelEl = el; this.refresh(); },
+      colCaret: el => { this.colCaretEl = el; },
+      colMenu: el => { this.colMenuEl = el; this.refresh(); },
+      toggleCol: () => this.setState({ colOpen: !this.state.colOpen }),
+      hint: el => { this.hintEl = el; },
+      counter: el => { this.counterEl = el; },
+      blobA: el => { this.blobAEl = el; },
+      blobB: el => { this.blobBEl = el; },
+      blobC: el => { this.blobCEl = el; },
+      blobD: el => { this.blobDEl = el; },
+      sphereDust: el => { this.sphereDustEl = el; },
+      sphereDustFront: el => { this.sphereDustFrontEl = el; },
+      loaderDust: el => { this.loaderDustEl = el; },
+      loader: el => { this.loaderEl = el; },
+      meter: el => { this.meterEl = el; },
+      bar: el => { this.barEl = el; },
+      pct: el => { this.pctEl = el; },
+      stepPrev: () => this.nudge(-1),
+      stepNext: () => this.nudge(1),
+      sphereRef: el => { this.bindToggleHover(el, "sphere"); },
+      galleryRef: el => { this.bindToggleHover(el, "gallery"); },
+      sphereBtn: v === "sphere" ? on : off,
+      galleryBtn: v === "gallery" ? on : off,
+      pickSphere: () => {
+        this.pan = 0; this.panVel = 0; this.panTarget = null;
+        this.setState({ view: "sphere", col: 0, colOpen: false });
+      },
+      pickGallery: () => this.setState({ view: "gallery" }),
+      pickCol: e => {
+        const b = e.target.closest ? e.target.closest("[data-col]") : null;
+        if (!b) return;
+        const k = parseInt(b.getAttribute("data-col"), 10);
+        if (!isNaN(k)) {
+          this.pan = 0; this.panVel = 0; this.panTarget = null;
+          this.setState({ col: k, colOpen: false, view: k === 0 ? "sphere" : "gallery" });
+        }
+      },
+      lbOpen: this.state.lb >= 0,
+      lbFrame: el => { this.lbFrameEl = el; },
+      lbImg: el => { this.lbImgEl = el; this.syncLb(); },
+      lbZoom: el => { this.lbZoomEl = el; },
+      zoomHint: el => { this.zoomHintEl = el; },
+      zoomIn: () => {
+        if (this.lbImgEl) this.lbImgEl.style.transform = "scale(2.4)";
+        if (this.zoomHintEl) this.zoomHintEl.style.opacity = "0";
+      },
+      zoomOut: () => {
+        if (this.lbImgEl) {
+          this.lbImgEl.style.transformOrigin = "50% 50%";
+          this.lbImgEl.style.transform = "scale(1)";
+        }
+        if (this.zoomHintEl) this.zoomHintEl.style.opacity = "1";
+      },
+      zoomMove: e => {
+        if (!this.lbImgEl) return;
+        const r = this.lbImgEl.getBoundingClientRect();
+        const x = Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
+        const y = Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100));
+        this.lbImgEl.style.transformOrigin = x.toFixed(1) + "% " + y.toFixed(1) + "%";
+      },
+      lbCollection: el => { this.lbCollectionEl = el; this.syncLb(); },
+      lbTitle: el => { this.lbTitleEl = el; this.syncLb(); },
+      lbTitleWrap: el => { this.lbTitleWrapEl = el; },
+      lbTitleFade: el => { this.lbTitleFadeEl = el; },
+      titleScroll: () => {
+        const t = this.lbTitleEl, wrap = this.lbTitleWrapEl;
+        if (!t || !wrap) return;
+        const over = t.scrollWidth - wrap.clientWidth;
+        if (over <= 4) return;
+        t.style.transitionDuration = Math.max(1.6, over / 42) + "s";
+        t.style.transform = "translateX(-" + over + "px)";
+        if (this.lbTitleFadeEl) this.lbTitleFadeEl.style.opacity = "0";
+      },
+      titleReset: () => {
+        const t = this.lbTitleEl;
+        if (!t) return;
+        t.style.transitionDuration = ".5s";
+        t.style.transform = "none";
+        this.markTitleOverflow();
+      },
+      lbSize: el => { this.lbSizeEl = el; this.syncLb(); },
+      lbExcerpt: el => { this.lbExcerptEl = el; this.syncLb(); },
+      lbOrigPrice: el => { this.lbOrigPriceEl = el; this.syncLb(); },
+      holoSpin: el => { this.holoSpinEl = el; },
+      holoVeil: el => { this.holoVeilEl = el; },
+      holoOn: () => {
+        if (this.holoSpinEl) { this.holoSpinEl.style.animationDuration = "4s"; this.holoSpinEl.style.opacity = this._origGone ? ".22" : "1"; }
+        if (this.holoVeilEl) this.holoVeilEl.style.background = "rgba(255,255,255,.3)";
+      },
+      holoOff: () => {
+        if (this.holoSpinEl) { this.holoSpinEl.style.animationDuration = "14s"; this.holoSpinEl.style.opacity = this._origGone ? ".14" : ".62"; }
+        if (this.holoVeilEl) this.holoVeilEl.style.background = "rgba(255,255,255,.62)";
+      },
+      lbOrigStatus: el => { this.lbOrigStatusEl = el; this.syncLb(); },
+      lbOrigBtn: el => { this.lbOrigBtnEl = el; this.syncLb(); },
+      lbPrintPrice: el => { this.lbPrintPriceEl = el; this.syncLb(); },
+      lbEdition: el => { this.lbEditionEl = el; this.syncLb(); },
+      lbPrintLeft: el => { this.lbPrintLeftEl = el; this.syncLb(); },
+      lbStrip: el => { this.lbStripEl = el; this.syncLb(); },
+      papers: this.paperData().map((p, i) => ({ i, label: p.label, note: p.note, delta: p.inStock ? (p.delta ? "+$" + p.delta : "Included") : "Sold out" })),
+      paperMenu: el => { this.paperMenuEl = el; this.syncPrint(); },
+      pickPaper: e => {
+        const b = e.target.closest ? e.target.closest("[data-paper]") : null;
+        if (!b) return;
+        const k = parseInt(b.getAttribute("data-paper"), 10);
+        const p = this.paperData()[k];
+        if (!p || p.inStock === false) return;
+        if (!isNaN(k)) this.setState({ paper: k });
+      },
+      /* Real Wix product pages, so a middle-click or a standalone visit lands
+         somewhere real instead of a placeholder file. */
+      origLink: (this.workData()[this.state.lb] || {}).url || "#",
+      printLink: (this.workData()[this.state.lb] || {}).url || "#",
+      printCard: el => { this.printCardEl = el; this.syncPrint(); },
+      lbPrintBtn: el => { this.lbPrintBtnEl = el; this.syncLb(); },
+      lbPick: e => {
+        const b = e.target.closest ? e.target.closest("[data-thumb]") : null;
+        if (!b) return;
+        const k = parseInt(b.getAttribute("data-thumb"), 10);
+        if (!isNaN(k) && k !== this.state.lb) this.step(k > this.state.lb ? 1 : -1, k);
+      },
+      lbPrev: () => this.step(-1),
+      lbNext: () => this.step(1),
+      openTile: e => {
+        if (this.drag && this.drag.moved > 6) return;
+        const node = e.target.closest ? e.target.closest("[data-work]") : null;
+        if (!node) return;
+        const all = [...this.stageEl.querySelectorAll("[data-work]")];
+        const k = all.indexOf(node);
+        if (k >= 0 && (this.visPos || {})[k] !== undefined) this.setState({ lb: k });
+      },
+      closeTile: () => this.setState({ lb: -1 })
+    };
+  }
+}
+</script>
+</body>
+</html>
