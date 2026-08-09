@@ -23,7 +23,8 @@
  *   the Wix cart itself. This is the other half:
  *
  *     iframe -> here : "ready"        ask for the catalog
- *                      "addToCart"    add a variant to the Wix cart
+ *                      "addToCart"    add a variant to the Wix cart, then
+ *                                     refresh and slide out the side cart
  *                      "openProduct"  go to the product page
  *     here -> iframe : "catalog"      artworks, prices, metadata, variant ids
  *                      "cartResult"   whether the add succeeded
@@ -37,8 +38,9 @@
  * `origVariantId` are what make the print card appear and Add to cart work.
  */
 
-import { productsV3, infoSectionsV3 } from '@wix/stores';
+import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
 import wixLocation from 'wix-location';
+import wixEcomFrontend from 'wix-ecom-frontend';
 import { currentCartV2 } from '@wix/ecom';
 
 const HTML_ID = 'html1';
@@ -144,9 +146,56 @@ function sectionOf(product, info, uniqueName) {
   return '';
 }
 
+/* Remaining edition counts — "37 left" in the lightbox.
+ *
+ * Products only carry an in-stock boolean; the exact count lives on inventory
+ * items, one per variant per location, so this is a second read keyed by
+ * variantId. Only quantity-tracked items have a number: a finish set to plain
+ * in-stock tracking reports no count, and the gallery then hides the label
+ * rather than inventing one.
+ *
+ * Search Inventory Items wants Manage Stores permission. If the site's page
+ * code isn't granted it the call throws, we log it once, and every artwork
+ * simply ships without `left` — same as before this existed. */
+let inventoryByVariant = null;
+async function loadInventory() {
+  if (inventoryByVariant) return inventoryByVariant;
+  inventoryByVariant = {};
+  try {
+    /** @type {any} */
+    const res = await inventoryItemsV3.searchInventoryItems({
+      cursorPaging: { limit: 100 },
+    });
+    for (const it of res.inventoryItems || res.items || []) {
+      /* The variant reference has moved around between shapes; read all of
+         them rather than betting on one. */
+      const vid =
+        it.variantId ||
+        (it.variant && idOf(it.variant)) ||
+        (it.productVariant && it.productVariant.variantId) ||
+        null;
+      if (!vid) continue;
+      inventoryByVariant[vid] = {
+        quantity: typeof it.quantity === 'number' ? it.quantity : null,
+        tracked: it.trackQuantity !== false,
+      };
+    }
+  } catch (err) {
+    console.error('[AG] could not read inventory counts (needs Manage Stores):', err);
+  }
+  return inventoryByVariant;
+}
+
+/* Whole units left for one variant, or 0 when the store isn't counting. */
+function leftOf(inventory, variantId) {
+  const rec = variantId && inventory[variantId];
+  if (!rec || !rec.tracked || typeof rec.quantity !== 'number') return 0;
+  return Math.max(0, Math.floor(rec.quantity));
+}
+
 /* Turn one Wix product into the shape index.html expects. */
 /** @param {any} product */
-function toArtwork(product, info) {
+function toArtwork(product, info, inventory) {
   const variants = (product.variantsInfo && product.variantsInfo.variants) || [];
 
   /* Originals: one visible Original variant is the sellable one. Prints: one
@@ -176,6 +225,7 @@ function toArtwork(product, info) {
         priceText: money(price),
         inStock,
         variantId: idOf(v),
+        left: leftOf(inventory, idOf(v)),
       };
     }
   }
@@ -216,6 +266,11 @@ function toArtwork(product, info) {
     priceText: money(origPrice),
     inStock: origInStock,
     printPrice,
+    /* The finish the gallery opens on is the cheapest one, so its count is the
+       one that matches the price shown before the buyer picks a finish. */
+    left: finishes.length
+      ? prints[finishes.reduce((a, b) => (prints[b].price < prints[a].price ? b : a))].left
+      : 0,
     prints: finishes.length ? prints : null,
     origVariantId,
   };
@@ -223,6 +278,7 @@ function toArtwork(product, info) {
 
 async function buildCatalog() {
   const info = await loadInfoSections();
+  const inventory = await loadInventory();
 
   /* queryProducts does NOT return variant data, so each product is fetched
      individually for its variant ids and per-finish prices. Fine for a
@@ -255,7 +311,7 @@ async function buildCatalog() {
 
   return full
     .filter(Boolean)
-    .map((res) => toArtwork(res, info))
+    .map((res) => toArtwork(res, info, inventory))
     .filter((a) => a.image);
 }
 
@@ -275,6 +331,24 @@ async function addToCart(productId, variantId) {
       },
     ],
   });
+
+  /* The SDK writes straight to the cart, which leaves the page's cart UI
+     showing stale data — only refreshCart() makes the cart icon and side cart
+     re-read it. Refresh first, then slide the cart out, so the panel opens
+     already showing the artwork that was just added. */
+  try {
+    await wixEcomFrontend.refreshCart();
+  } catch (err) {
+    console.error('[AG] could not refresh the cart UI:', err);
+  }
+  try {
+    wixEcomFrontend.openSideCart();
+  } catch (err) {
+    /* Sites still on the old Mini Cart have no side cart to open (and it
+       throws outright on mobile there). The item is in the cart either way,
+       so this is a missing flourish, not a failed purchase. */
+    console.warn('[AG] side cart unavailable, item still added:', err);
+  }
 }
 
 async function sendCatalog() {
