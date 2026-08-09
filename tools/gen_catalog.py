@@ -51,6 +51,17 @@ ROWS = [
 ]
 
 
+# Painting size by slug. Wix stores no per-product dimensions, so they live
+# here until they do. Blank hides the Dimensions row rather than showing an
+# empty one. Keep in sync with SIZES in wix/page-code.js.
+SIZES = {
+    "crowned-girl-01": "", "crowned-girl-02": "", "crowned-girl-03": "",
+    "crowned-girl-04": "", "angel-with-companion": "", "the-keeper": "",
+    "two-together": "", "be-kind-to-yourself": "", "small-mercies": "",
+    "night-study-01": "", "night-study-02": "",
+}
+
+
 def money(n):
     return "$" + format(n, ",")
 
@@ -64,6 +75,7 @@ def build():
             "url": SITE + "/product-page/" + slug,
             "image": CDN + media + TRANSFORM,
             "title": name,
+            "size": SIZES.get(slug, ""),
             "collections": [collection],
             "description": desc,
             "price": original,

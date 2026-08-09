@@ -56,6 +56,32 @@ const CATEGORY_NAMES = {
   'b3c85211-c373-43d3-9fc7-46f5c66d402c': 'Night Studies',
 };
 
+/* Painting size, keyed by product slug.
+ *
+ * Wix has nowhere to put this today: the products all share one "Size" info
+ * section with no per-product value, physicalProperties is empty, and there
+ * are no custom fields. So the dimensions have to be listed here until they
+ * exist in the store.
+ *
+ * Fill these in and the Dimensions row appears in the lightbox. Anything left
+ * blank hides the row rather than showing an empty one. If you would rather
+ * keep them in Wix, add a per-product info section and say so — reading it
+ * here instead is a small change.
+ */
+const SIZES = {
+  'crowned-girl-01': '',
+  'crowned-girl-02': '',
+  'crowned-girl-03': '',
+  'crowned-girl-04': '',
+  'angel-with-companion': '',
+  'the-keeper': '',
+  'two-together': '',
+  'be-kind-to-yourself': '',
+  'small-mercies': '',
+  'night-study-01': '',
+  'night-study-02': '',
+};
+
 /* The SDK names ids `_id`, but nested references (category refs, for one) come
    back as `id`. Reading them through an `any` helper keeps the editor's type
    checker quiet either way.
@@ -151,6 +177,7 @@ function toArtwork(product) {
       '/product-page/' + product.slug,
     image: webImage(media && media.url, 1200),
     title: product.name || 'Untitled',
+    size: SIZES[product.slug] || '',
     collections: collections.length ? collections : ['Works'],
     description: product.plainDescription || '',
     price: origPrice,
