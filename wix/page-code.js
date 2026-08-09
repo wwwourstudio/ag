@@ -20,7 +20,10 @@
  */
 
 import wixLocation from 'wix-location';
-import { buildCatalog, addToCart } from 'public/artworkSync.js';
+/* Velo resolves Public modules without the file extension — 'public/artworkSync.js'
+   does not resolve, 'public/artworkSync' does. The file must exist first:
+   Public & Backend -> Public -> artworkSync.js, holding wix/public-artworkSync.js. */
+import { buildCatalog, addToCart } from 'public/artworkSync';
 
 const HTML_ID = 'html1';
 

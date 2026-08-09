@@ -69,6 +69,10 @@ Two files, and which one they go in matters:
 | `wix/public-artworkSync.js` | Public & Backend -> **Public** -> `artworkSync.js` |
 | `wix/page-code.js` | the **Gallery page's** code panel |
 
+Create the Public file first — the page code imports it as
+`from 'public/artworkSync'`, with no `.js` extension (Velo does not resolve the
+extension, and the module has to exist before the import will bind).
+
 `$w` and `wix-location` exist only in page code. Putting the catalog logic in
 `data.js` or a Public file alongside `$w` fails the build with
 `Cannot use namespace '$w' as a value`, which is why the two are separate: the
