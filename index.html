@@ -27,12 +27,23 @@
       if (api._pending && api._pending.btn) api._pending.btn.textContent = api._pending.label;
       api._pending = null;
     };
-    api.addToCart = function (productId, variantId, label, btn) {
+    api.addToCart = function (productId, variantId, label, btn, fallback) {
       api._restore();
-      api._pending = { label: label, btn: btn };
+      var pending = { label: label, btn: btn };
+      api._pending = pending;
       if (btn) btn.textContent = "Adding\u2026";
       api.send({ type: "addToCart", productId: productId, variantId: variantId, quantity: 1 });
-      setTimeout(api._restore, 6000);
+      /* Silence here means the Wix page code isn't listening \u2014 the same
+         reason its catalog never arrived. Don't strand the buyer on a button
+         that just sighs and resets: restore it and send them to the product
+         page, where the store can still take the order. */
+      setTimeout(function () {
+        if (api._pending !== pending) return;
+        api._restore();
+        console.error("[gallery] no cartResult after 6s \u2014 the Wix page code is not " +
+                      "answering. Check the Gallery page code is published.");
+        if (fallback) api.openProduct(fallback.slug, fallback.url);
+      }, 6000);
     };
     W.addEventListener("message", function (e) {
       var m = e && e.data;
@@ -53,6 +64,13 @@
           }
           console.error("[gallery] add to cart failed:", m.error || "unknown");
         }
+        return;
+      }
+      /* The Wix page failed to build the catalog. It logs this on its own
+         side too, but that console is the editor's — surfacing it here puts
+         the reason where anyone looking at the live site will find it. */
+      if (m.type === "catalogError") {
+        console.error("[gallery] the Wix page could not build the catalog:", m.error);
         return;
       }
       /* How many pixels of this frame's bottom edge sit below the browser
@@ -123,6 +141,17 @@
     api.send({ type: "ready" });
     W.addEventListener("load", function () { api.send({ type: "ready" }); });
     setTimeout(function () { if (!api.catalog) api.send({ type: "ready" }); }, 1200);
+    /* Say so, once, when we are clearly inside Wix but the catalog never
+       came. The gallery still works off its baked snapshot — add to cart
+       included, since that carries variant ids — but prices and stock are
+       only as fresh as the last regeneration, so this should not go
+       unnoticed. */
+    setTimeout(function () {
+      if (!api.inWix || (api.catalog && api.catalog.length)) return;
+      console.error("[gallery] no catalog from the Wix page after 6s — running on the " +
+                    "baked snapshot, so prices and stock may be stale. Check the Gallery " +
+                    "page code is published and that HTML_ID matches this embed's element id.");
+    }, 6000);
   })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -152,16 +181,35 @@
        nothing and the detail column overflows. Stack instead: artwork on
        top at a size worth looking at, details scrolling underneath. */
     @media (max-width: 820px) {
+      /* The whole lightbox scrolls as one page — artwork, details and both
+         buy cards in a single run. The shell sets touch-action: none so a
+         drag tumbles the sphere instead of panning the document, and that
+         also killed scrolling in here: the detail column had overflow:auto
+         but no gesture ever reached it. Opt back in with pan-y and let the
+         overlay itself be the scroller. */
+      [data-lb-overlay] {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        touch-action: pan-y !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
       [data-lb-grid] {
+        position: relative !important;
+        inset: auto !important;
         grid-template-columns: 1fr !important;
-        grid-template-rows: auto minmax(0, 1fr) !important;
+        grid-template-rows: auto auto !important;
+        min-height: 100%;
+        /* Clear the pinned thumbnail strip, which floats over the scroll. */
+        padding-bottom: calc(104px + var(--ag-cut, 0px)) !important;
       }
       [data-lb-side] {
         order: 1 !important;
         border-right: 0 !important;
         border-top: 1px solid rgba(20,23,26,.08) !important;
         padding: 20px clamp(18px, 5vw, 28px) 28px !important;
-        -webkit-overflow-scrolling: touch;
+        /* The page scrolls now, so this must not trap it in a nested one. */
+        overflow: visible !important;
       }
       [data-lb-view] {
         order: 0 !important;
@@ -171,8 +219,18 @@
         max-width: min(88vw, 520px) !important;
         max-height: 38vh !important;
       }
-      /* Full width once the detail column is no longer beside it. */
-      [data-lb-strip] { left: 0 !important; }
+      /* Full width once the detail column is no longer beside it, and lifted
+         clear of the Wix banner's overhang the same way the home bar is —
+         pinned to the viewport rather than to the frame's bottom edge, which
+         on a free site sits below what the phone can actually show. Goes back
+         to flush once the plan is upgraded and the cut becomes 0. */
+      [data-lb-strip] {
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: var(--ag-cut, 0px) !important;
+        transition: bottom .25s ease;
+      }
     }
 
     /* Short landscape phones: give the artwork the height instead. */
@@ -285,7 +343,7 @@
   </div>
 
   <sc-if value="{{ lbOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position: fixed; inset: 0; z-index: 8000; background: #efece6; animation: softIn .32s ease both;">
+    <div data-lb-overlay="1" style="position: fixed; inset: 0; z-index: 8000; background: #efece6; animation: softIn .32s ease both;">
       <div style="position: absolute; inset: 0; background: radial-gradient(64% 52% at 34% 20%, rgba(255,255,255,.9) 0%, transparent 70%), radial-gradient(46% 42% at 84% 78%, rgba(214,52,132,.1) 0%, transparent 72%);"></div>
 
       <div data-lb-grid="1" style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
@@ -415,7 +473,7 @@ const AG_CATALOG_FALLBACK = [
       "id": "f783b558-a740-488f-9bb8-fa7236795ad7",
       "slug": "night-study-02",
       "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-02",
-      "image": "https://static.wixstatic.com/media/ee1cab_877fff041cfd49699212736a8b37a0a2~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+      "image": "https://static.wixstatic.com/media/11062b_818116e459a94b2a933ec6c6ed9240c3~mv2.jpg/v1/fit/w_1200,h_1200,q_85/file.jpg",
       "title": "Night Study 02",
       "size": "16 x 20 in",
       "year": 2024,
@@ -432,19 +490,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 245,
           "priceText": "$245",
-          "inStock": true
+          "inStock": true,
+          "variantId": "52c5e41a-6931-4b66-a2a6-cf5ee060348f"
         },
         "Gloss": {
           "price": 270,
           "priceText": "$270",
-          "inStock": true
+          "inStock": true,
+          "variantId": "d4d56eae-6a57-4489-afdc-99043b60e685"
         },
         "Metallic": {
           "price": 300,
           "priceText": "$300",
-          "inStock": true
+          "inStock": true,
+          "variantId": "d5914adf-33b1-4dd4-b58e-6ee8be01fc28"
         }
-      }
+      },
+      "origVariantId": "816e14af-0848-4cfd-927b-53e648975bad"
     },
     {
       "id": "5b42f4c0-482a-4bf1-a8fb-dd53a55272ce",
@@ -467,19 +529,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 320,
           "priceText": "$320",
-          "inStock": true
+          "inStock": true,
+          "variantId": "b0e9a263-00d9-4fa1-808f-580721dd5a0b"
         },
         "Gloss": {
           "price": 345,
           "priceText": "$345",
-          "inStock": true
+          "inStock": true,
+          "variantId": "7d645b1c-1350-47ed-93ea-99107bd836ed"
         },
         "Metallic": {
           "price": 375,
           "priceText": "$375",
-          "inStock": true
+          "inStock": true,
+          "variantId": "2bdeb2c5-bfdd-4b0c-8d20-ebf05063509a"
         }
-      }
+      },
+      "origVariantId": "39358f47-8914-463c-a040-6f420299fdc4"
     },
     {
       "id": "f02c87fb-47ea-49e5-9419-6007a6c691d8",
@@ -502,19 +568,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 185,
           "priceText": "$185",
-          "inStock": true
+          "inStock": true,
+          "variantId": "143be7a8-c176-4927-8fd2-a0235054706f"
         },
         "Gloss": {
           "price": 210,
           "priceText": "$210",
-          "inStock": true
+          "inStock": true,
+          "variantId": "e6518819-5dbf-4e94-a960-5fb7358ed79e"
         },
         "Metallic": {
           "price": 240,
           "priceText": "$240",
-          "inStock": true
+          "inStock": true,
+          "variantId": "acf21c85-1a13-4309-864f-f347885f16a4"
         }
-      }
+      },
+      "origVariantId": "bd59d502-a3e2-421e-8008-3bd2e7aa8598"
     },
     {
       "id": "d8f43217-047b-42ef-abb7-22f582131b9d",
@@ -537,19 +607,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 175,
           "priceText": "$175",
-          "inStock": true
+          "inStock": true,
+          "variantId": "2142181d-039d-4534-a98c-1267542dc4c3"
         },
         "Gloss": {
           "price": 200,
           "priceText": "$200",
-          "inStock": true
+          "inStock": true,
+          "variantId": "2c8b7f93-5e36-4d96-8b15-88b941fb9e76"
         },
         "Metallic": {
           "price": 230,
           "priceText": "$230",
-          "inStock": true
+          "inStock": true,
+          "variantId": "954438f9-5bd4-4f05-a2a2-f39cf8609ebc"
         }
-      }
+      },
+      "origVariantId": "167960ec-ca42-4bf6-bc08-0a46134d509d"
     },
     {
       "id": "573bbcc0-55ef-4974-b403-1ed3d042a0ef",
@@ -572,19 +646,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 265,
           "priceText": "$265",
-          "inStock": true
+          "inStock": true,
+          "variantId": "c2880686-636c-4206-b059-f1bcb7ddac8e"
         },
         "Gloss": {
           "price": 290,
           "priceText": "$290",
-          "inStock": true
+          "inStock": true,
+          "variantId": "516fcd40-5d2b-4b9f-b37a-ddd6226705c8"
         },
         "Metallic": {
           "price": 320,
           "priceText": "$320",
-          "inStock": true
+          "inStock": true,
+          "variantId": "5f5d04c6-fb4d-4185-912c-190cc34a75b3"
         }
-      }
+      },
+      "origVariantId": "9a2a4ccb-8263-4131-a2f4-e1528a21c325"
     },
     {
       "id": "c058c9c5-312a-4f70-b7e4-4c7d32046100",
@@ -607,19 +685,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 250,
           "priceText": "$250",
-          "inStock": true
+          "inStock": true,
+          "variantId": "4e9d9a4a-2c23-4738-ac50-97b79ecdf11f"
         },
         "Gloss": {
           "price": 275,
           "priceText": "$275",
-          "inStock": true
+          "inStock": true,
+          "variantId": "dbff5af9-84c5-41db-a558-36209ebeaafc"
         },
         "Metallic": {
           "price": 305,
           "priceText": "$305",
-          "inStock": true
+          "inStock": true,
+          "variantId": "4c6e9065-909a-4ab8-8374-7d40ca14d488"
         }
-      }
+      },
+      "origVariantId": "f2e545e9-bc81-4e19-a4ed-f7d3c5c98b53"
     },
     {
       "id": "cc1ab4d6-1b5a-4590-9056-a90e986d7ee6",
@@ -642,19 +724,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 280,
           "priceText": "$280",
-          "inStock": true
+          "inStock": true,
+          "variantId": "c4da832d-69ed-4ab7-9740-4f3babe18c6c"
         },
         "Gloss": {
           "price": 305,
           "priceText": "$305",
-          "inStock": true
+          "inStock": true,
+          "variantId": "25ec3fe8-852d-427e-ac8d-1b5827377da6"
         },
         "Metallic": {
           "price": 335,
           "priceText": "$335",
-          "inStock": true
+          "inStock": true,
+          "variantId": "f05e2f95-6907-4e78-a859-f8c36954af4f"
         }
-      }
+      },
+      "origVariantId": "44702ef1-b2bc-432a-be72-89405369b3de"
     },
     {
       "id": "a54d3ae3-e49c-4f94-8b54-a62a42e60f51",
@@ -677,19 +763,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 195,
           "priceText": "$195",
-          "inStock": true
+          "inStock": true,
+          "variantId": "f0f8e904-8014-4f9b-a574-9c76ee179a2e"
         },
         "Gloss": {
           "price": 220,
           "priceText": "$220",
-          "inStock": true
+          "inStock": true,
+          "variantId": "79ac40a0-9d1c-4725-a471-b1b3dca7b591"
         },
         "Metallic": {
           "price": 250,
           "priceText": "$250",
-          "inStock": true
+          "inStock": true,
+          "variantId": "e41877d9-4c7a-4516-a594-b88f2b412b0e"
         }
-      }
+      },
+      "origVariantId": "09d72c14-7f5a-4eb4-a997-a7cc96b0ee35"
     },
     {
       "id": "1aa22102-cdb5-42ce-92d8-0d65e8e933d2",
@@ -712,19 +802,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 240,
           "priceText": "$240",
-          "inStock": true
+          "inStock": true,
+          "variantId": "30273d91-a2f8-4ffc-a47c-c279326b70df"
         },
         "Gloss": {
           "price": 265,
           "priceText": "$265",
-          "inStock": true
+          "inStock": true,
+          "variantId": "21dc7de9-0171-4221-b8e7-7aa4fe824ee2"
         },
         "Metallic": {
           "price": 295,
           "priceText": "$295",
-          "inStock": true
+          "inStock": true,
+          "variantId": "c582d730-d3ac-4338-88c3-4d9e133269b6"
         }
-      }
+      },
+      "origVariantId": "d12f5c9a-3eca-4e3c-b6d2-d0706f23650d"
     },
     {
       "id": "99fa1741-dfea-4f42-b51a-c2e6ced6ad69",
@@ -747,19 +841,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 260,
           "priceText": "$260",
-          "inStock": true
+          "inStock": true,
+          "variantId": "b991da85-bc8a-4198-887b-4415bee97ecf"
         },
         "Gloss": {
           "price": 285,
           "priceText": "$285",
-          "inStock": true
+          "inStock": true,
+          "variantId": "f6c14f06-0303-488b-a718-2357789e8684"
         },
         "Metallic": {
           "price": 315,
           "priceText": "$315",
-          "inStock": true
+          "inStock": true,
+          "variantId": "faf3977d-c4cb-4ac2-8a09-cfbdc2e607e9"
         }
-      }
+      },
+      "origVariantId": "d90498a2-0a55-4e1a-bafc-a82b4bc23a73"
     },
     {
       "id": "0ac8e5d9-6768-4f6a-be49-fb2f4b51f442",
@@ -782,19 +880,23 @@ const AG_CATALOG_FALLBACK = [
         "Matte": {
           "price": 220,
           "priceText": "$220",
-          "inStock": true
+          "inStock": true,
+          "variantId": "1bc8d176-e29e-487d-9e1b-e7c305889b05"
         },
         "Gloss": {
           "price": 245,
           "priceText": "$245",
-          "inStock": true
+          "inStock": true,
+          "variantId": "7411214e-7673-4c9b-b408-7ddf32a12859"
         },
         "Metallic": {
           "price": 275,
           "priceText": "$275",
-          "inStock": true
+          "inStock": true,
+          "variantId": "f208e2a8-d6ce-4c83-beef-59222d88ff62"
         }
-      }
+      },
+      "origVariantId": "3de488af-c612-4576-b535-dd25a73f6fc4"
     }
   ];
 
@@ -1018,8 +1120,11 @@ class Component extends DCLogic {
     if (this.catalog()) this.onCatalog();
 
     this.onWheel = e => {
-      e.preventDefault();
+      /* With the lightbox open the wheel belongs to it — let the overlay
+         scroll natively. Preventing default first swallowed every scroll
+         inside the panel, which is what pinned the buy cards out of reach. */
       if (this.state.lb >= 0) return;
+      e.preventDefault();
       if (this.view === "gallery") { this.walked = true; this.panVel += (e.deltaY + e.deltaX) * 0.55; }
       else {
         const dx = e.deltaX || 0, dy = e.deltaY || 0;
@@ -1294,26 +1399,29 @@ class Component extends DCLogic {
         const cur = this.workData()[this.state.lb];
         if (!cur || !window.AGWix) return;
 
-        /* Standalone there is no Wix cart to talk to, so send the buyer to
-           the product page instead of leaving the button spinning. */
-        if (!this.liveCatalog()) {
-          window.AGWix.openProduct(cur.slug, cur.url);
-          return;
-        }
-
         let variantId = null;
         if (kind === "orig") variantId = cur.origVariantId;
         else { const pr = this.currentPrint(); variantId = pr && pr.variantId; }
-        if (!variantId) {
-          console.error("[gallery] no variantId for", kind, cur.title,
-                        "— origVariantId:", cur.origVariantId,
-                        "prints:", cur.prints);
-          const lbl = el.textContent;
-          el.textContent = "Unavailable";
-          setTimeout(() => { el.textContent = lbl; }, 2500);
+
+        /* What decides this is the variant id, not whether the catalog is
+           live. The baked snapshot carries real ids now, so an embed whose
+           catalog message never arrived still adds the right variant instead
+           of bouncing the buyer to the product page.
+
+           Standalone there is no parent to carry the add, and with no id
+           there is nothing to add — either way the product page is where the
+           sale can still happen. */
+        if (!window.AGWix.inWix || !variantId) {
+          if (!variantId) {
+            console.error("[gallery] no variantId for", kind, cur.title,
+                          "— origVariantId:", cur.origVariantId,
+                          "prints:", cur.prints);
+          }
+          window.AGWix.openProduct(cur.slug, cur.url);
           return;
         }
-        window.AGWix.addToCart(cur.id, variantId, el.textContent, el);
+        window.AGWix.addToCart(cur.id, variantId, el.textContent, el,
+                               { slug: cur.slug, url: cur.url });
       });
     };
     wire(this.lbOrigBtnEl, "orig");
