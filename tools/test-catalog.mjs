@@ -1,22 +1,15 @@
-// Smoke test for the gallery's data pipeline: loads the real component script
-// with a stubbed runtime and exercises the catalog -> works -> pricing path.
+// Smoke test for the gallery's data pipeline.
+//
+// The gallery carries no artwork of its own any more: the catalog is read from
+// the Wix store at load time, either from the parent Wix page over postMessage
+// or directly from the Wix API. So the first thing this checks is that nothing
+// about the artwork is baked into index.html, and the rest feeds catalogs in
+// the way the two live sources do and checks what comes out.
 import fs from "node:fs";
 import vm from "node:vm";
 
 const html = fs.readFileSync("/home/user/ag/index.html", "utf8");
 const body = html.match(/<script type="text\/x-dc"[^>]*>([\s\S]*?)<\/script>/)[1];
-
-const ctx = {
-  console,
-  window: {},
-  DCLogic: class { setState() {} },
-};
-ctx.globalThis = ctx;
-vm.createContext(ctx);
-vm.runInContext(body + "\n;globalThis.__C = Component;", ctx);
-
-const c = new ctx.__C();
-c.state = { lb: 0, col: 0, paper: 0, ptype: 0 };
 
 let fails = 0;
 const ok = (cond, msg) => {
@@ -24,65 +17,110 @@ const ok = (cond, msg) => {
   else console.log("  ok   " + msg);
 };
 
-console.log("\nstandalone (no Wix parent)");
-const works = c.workData();
-ok(works.length === 11, `11 artworks (got ${works.length})`);
-ok(works.every(w => /^https:\/\/static\.wixstatic\.com\//.test(w.src)),
-   "every image points at the Wix CDN");
-ok(works.every(w => /\/v1\/fit\/w_1200/.test(w.src)),
-   "every image uses a Wix resize transform (not the raw multi-MB PNG)");
-ok(!JSON.stringify(works).includes("art-web"), "no art-web/*.jpg references remain");
-ok(works.every(w => w.prints && Object.keys(w.prints).length === 3),
-   "prints carried through workData (the dropped-field bug)");
-ok(works.every(w => w.title && w.priceText && w.url),
-   "title, price text and store URL present on every artwork");
+console.log("\nnothing is baked in");
+// A media id is what a hardcoded artwork looks like: the gallery should hold
+// none, because it has not read the store yet at parse time.
+ok(!/static\.wixstatic\.com\/media\//.test(html),
+   "no Wix CDN artwork URLs anywhere in index.html");
+ok(!/AG_CATALOG_FALLBACK/.test(html), "no baked catalog constant");
+ok(!/art-web/.test(html), "no art-web/*.jpg references remain");
+// Product names and variant ids are catalogue data too.
+ok(!/Crowned Girl|Night Study|Small Mercies|Be Kind to Yourself/.test(html),
+   "no product titles hardcoded");
 
-const sold = works.filter(w => w.sold).map(w => w.title).sort();
-ok(JSON.stringify(sold) === JSON.stringify(["Crowned Girl 03", "Small Mercies"]),
-   "sold-out originals match Wix stock: " + sold.join(", "));
-
-console.log("\ncollections");
-const cols = c.collectionData();
-ok(cols[0].key === "all", "'View all' first");
-ok(JSON.stringify(cols.slice(1).map(x => x.label)) ===
-   JSON.stringify(["Crowned Girls", "Angels & Companions", "Kind Words", "Night Studies"]),
-   "collection order: " + cols.slice(1).map(x => x.label).join(" / "));
-const counts = {};
-works.forEach(w => { counts[w.collection] = (counts[w.collection] || 0) + 1; });
-ok(counts["Crowned Girls"] === 4 && counts["Angels & Companions"] === 3 &&
-   counts["Kind Words"] === 2 && counts["Night Studies"] === 2,
-   "counts match Wix categories: " + JSON.stringify(counts));
-
-console.log("\npricing off real variants");
-const paper = c.paperData();
-ok(paper.length === 3, "three paper finishes");
-ok(paper[0].label === "Matte" && paper[0].delta === 0, "Matte is the anchor");
-ok(paper[1].label === "Gloss" && paper[1].delta === 25, "Gloss +$25 (from Wix variants)");
-ok(paper[2].label === "Metallic" && paper[2].delta === 55, "Metallic +$55 (from Wix variants)");
-// Night Study 02 is index 0: matte print 245
-ok(c.printTotal(works[0]) === 245, `print total tracks the finish (got ${c.printTotal(works[0])})`);
-c.state.paper = 2;
-ok(c.printTotal(works[0]) === 300, `metallic print total 300 (got ${c.printTotal(works[0])})`);
-c.state.paper = 0;
-
-console.log("\nlive Wix catalog overrides the baked one");
-ctx.window.AGWix = {
-  catalog: [{
-    id: "p1", slug: "live-one", url: "https://example.test/p/live-one",
-    image: "https://static.wixstatic.com/media/live.png", title: "Live One",
-    collections: ["New Work"], description: "d", price: 500, priceText: "$500",
-    inStock: true, printPrice: 90, origVariantId: "v-orig",
-    prints: { Matte: { price: 90, priceText: "$90", inStock: true, variantId: "v-m" } },
-  }],
+const makeComponent = () => {
+  const ctx = { console, window: {}, DCLogic: class { setState() {} } };
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(body + "\n;globalThis.__C = Component;", ctx);
+  const c = new ctx.__C();
+  c.state = { lb: 0, col: 0, paper: 0, ptype: 0 };
+  return { ctx, c };
 };
-c._works = null; c._cols = null;
-const live = c.workData();
-ok(live.length === 1 && live[0].title === "Live One", "live catalog replaces the snapshot");
-ok(live[0].origVariantId === "v-orig", "origVariantId carried (Add to cart bug)");
-ok(live[0].prints.Matte.variantId === "v-m", "print variantId carried");
-ok(c.liveCatalog() === true, "liveCatalog() true when embedded");
-ok(c.collectionData().slice(1)[0].label === "New Work",
-   "unknown collection still appears in the menu");
+
+// One artwork in the shape both live sources produce.
+const artwork = (over = {}) => ({
+  id: "p1", slug: "live-one", url: "https://example.test/p/live-one",
+  image: "https://static.wixstatic.com/media/live.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
+  title: "Live One", medium: "Mixed media on paper", size: "16 x 20 in",
+  year: 2024, edition: 50, collections: ["New Work"], description: "d",
+  price: 500, priceText: "$500", inStock: true, printPrice: 90,
+  origVariantId: "v-orig",
+  prints: {
+    Matte: { price: 90, priceText: "$90", inStock: true, variantId: "v-m" },
+    Gloss: { price: 115, priceText: "$115", inStock: true, variantId: "v-g" },
+    Metallic: { price: 145, priceText: "$145", inStock: true, variantId: "v-x" },
+  },
+  ...over,
+});
+
+console.log("\nno source has answered yet");
+{
+  const { c } = makeComponent();
+  ok(c.catalog() === null, "catalog() is null rather than a snapshot");
+  ok(c.workData().length === 0, "no artwork invented");
+  ok(c.liveCatalog() === false, "liveCatalog() false");
+  const st = c.catalogStatus();
+  ok(st && !st.failed && /loading/i.test(st.text), "status says loading: " + (st && st.text));
+}
+
+console.log("\nthe store could not be reached");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGStore = { catalog: null, error: "boom", settled: true };
+  const st = c.catalogStatus();
+  ok(st && st.failed, "status reports failure rather than showing stale work");
+  ok(c.workData().length === 0, "still no artwork invented");
+}
+
+console.log("\ncatalog from the Wix parent page (embedded)");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGWix = { catalog: [artwork()] };
+  const works = c.workData();
+  ok(works.length === 1 && works[0].title === "Live One", "artwork comes from the bridge");
+  ok(works[0].origVariantId === "v-orig", "origVariantId carried (Add to cart bug)");
+  ok(works[0].prints.Matte.variantId === "v-m", "print variantId carried");
+  ok(works[0].medium === "Mixed media on paper", "medium read from the store");
+  ok(c.liveCatalog() === true, "liveCatalog() true");
+  ok(c.catalogStatus() === null, "no status overlay once artwork is in");
+  ok(c.collectionData().slice(1)[0].label === "New Work",
+     "a collection the code has never heard of still appears in the menu");
+}
+
+console.log("\ncatalog read directly from Wix (standalone)");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGStore = { catalog: [artwork({ title: "Direct One" })], error: null, settled: true };
+  const works = c.workData();
+  ok(works.length === 1 && works[0].title === "Direct One", "artwork comes from the direct read");
+  ok(c.liveCatalog() === true, "liveCatalog() true without a Wix parent");
+  ok(c.catalogStatus() === null, "no status overlay");
+}
+
+console.log("\nthe parent page wins when both answer");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGStore = { catalog: [artwork({ title: "Direct One" })], error: null, settled: true };
+  ctx.window.AGWix = { catalog: [artwork({ title: "Bridge One" })] };
+  ok(c.workData()[0].title === "Bridge One",
+     "the site's own read is preferred (it carries inventory counts)");
+}
+
+console.log("\npricing off whatever variants the store sent");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGWix = { catalog: [artwork()] };
+  const works = c.workData();
+  const paper = c.paperData();
+  ok(paper.length === 3, "three paper finishes");
+  ok(paper[0].label === "Matte" && paper[0].delta === 0, "Matte is the anchor");
+  ok(paper[1].label === "Gloss" && paper[1].delta === 25, "Gloss +$25, from the variant price");
+  ok(paper[2].label === "Metallic" && paper[2].delta === 55, "Metallic +$55, from the variant price");
+  ok(c.printTotal(works[0]) === 90, `print total tracks the finish (got ${c.printTotal(works[0])})`);
+  c.state.paper = 2;
+  ok(c.printTotal(works[0]) === 145, `metallic print total 145 (got ${c.printTotal(works[0])})`);
+}
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

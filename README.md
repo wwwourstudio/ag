@@ -21,38 +21,50 @@ end holding the component class.
 
 - Two view modes, **Sphere** (artworks orbiting in 3D, drag to spin) and **Wall**
   (flat gallery wall with lighting), toggled from the bottom chrome.
-- A **Collections** menu filtering to one of four collections: Crowned Girls,
-  Angels & Companions, Kind Words, Night Studies.
+- A **Collections** menu built from whatever collections the store's products
+  are actually in — rename one in Wix and the menu follows.
 - A lightbox with hover-to-zoom, artwork metadata (size, year, edition), and
   original / print pricing.
 - An animated colour-wash background, particle dust canvases, and an idle spin.
 
-### Wix embedding
+## The catalog is always live
 
-The page is built to run standalone *and* inside a Wix site as an iframe. The
-`AGWix` bridge at the top of `index.html` talks to the Wix parent over
-`postMessage`:
+**No artwork is stored in this repo.** No titles, no prices, no image URLs, no
+variant ids, no collection names. The gallery reads the Wix store on every load,
+so adding, editing or deleting a product in Wix is the whole job — there is
+nothing here to regenerate and nothing that can go stale.
 
-- sends `ready`, receives `catalog` — when the parent supplies a catalog, the
-  real Wix products and prices replace the built-in artwork list.
-- sends `addToCart` / `openProduct`, receives `cartResult`.
+There are two live sources, and both are reads of the same store:
 
-Standalone (no Wix parent), the page falls back to a generated set of 24
-artworks defined in `index.html`, priced and sized locally.
+| Source | Where it runs | What it needs |
+| --- | --- | --- |
+| `AGWix` — the parent Wix page over `postMessage` | inside the Wix site only | `wix/page-code.js` published on the Gallery page |
+| `AGStore` — the Wix API, read straight from the browser | everywhere | the headless client id in `index.html` |
 
-## Artwork images — not in this repo
+`AGWix` wins when both answer, because it is the site's own read and carries
+per-variant inventory counts ("37 left"). `AGStore` is what makes the standalone
+page work, and what covers the embed when the page code is missing or silent.
 
-The gallery loads its images from `art-web/02.jpg` … `art-web/10.jpg`
-(8 distinct files: `02`–`08` and `10`), resolved as:
+If neither answers, the gallery says so on screen. It does not invent artwork.
 
-```js
-src: (window.AG_ART && window.AG_ART[n]) || ("art-web/" + n + ".jpg")
-```
+### The headless client id
 
-That fallback is gone. Artwork now comes from the Wix CDN through resize
-transforms, both in the live catalog and in the baked snapshot, so this repo is
-a complete deployable copy. The only binary asset is `logo/wordmark.png`, which
-the loader samples to build its particle wordmark.
+`AGStore` authenticates as an anonymous visitor using a Wix Headless client id,
+a public identifier held in `index.html`. It is **not** a secret: it only mints
+visitor tokens, which can read publicly visible store data and nothing else. The
+client secret is not in this repo and must never be — visitor auth does not use
+one. Manage the client in the site's dashboard under Headless Settings.
+
+### Cart
+
+Adding to cart still needs the Wix parent frame, since the cart belongs to the
+Wix site. Standalone, the buy button links out to the product page instead.
+
+## Assets
+
+The only binary asset is `logo/wordmark.png`, which the loader samples to build
+its particle wordmark. Artwork images are served from the Wix CDN through resize
+transforms, requested at runtime from whatever the store currently holds.
 
 ## Provenance
 
@@ -62,8 +74,16 @@ were recovered from the running production deployment.
 
 ## Wix side
 
-One file: `wix/page-code.js` goes in the **Gallery page's** code panel — the
-editor tab named after the page. Nowhere else, and nothing else needed.
+`wix/page-code.js` goes in the **Gallery page's** code panel — the editor tab
+named after the page. Nowhere else.
+
+It imports two backend files, so create both **before** pasting it (an import of
+a file that isn't there fails the whole page code, not just the catalog):
+
+- `backend/artworkCatalog.web.js` — reads products, variants, info sections and
+  inventory with elevated permissions.
+- `backend/artworkCategories.web.js` — turns category ids into collection names.
+  Needs `@wix/categories` installed first (Packages & Apps → npm).
 
 - Not `data.js`, not a Public file: `$w` and `wix-location` exist only in page
   code, and using them elsewhere fails with

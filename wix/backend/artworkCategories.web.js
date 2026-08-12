@@ -1,10 +1,10 @@
 /*
  * Annie Green — collection names from the store.
  *
- * OPTIONAL. Everything works without this file; the gallery just reads
- * collection names from the CATEGORY_NAMES table in the page code instead of
- * from Wix. Add it when you want renaming, adding or deleting a collection in
- * Wix to show up in the gallery on its own.
+ * REQUIRED. The page code holds no table of collection names any more, so this
+ * is what turns the category ids on a product into the labels in the gallery's
+ * Collections menu. Rename a collection in Wix and the menu renames; add or
+ * delete one and it appears or goes.
  *
  * WHERE THIS GOES
  *   Wix Studio editor -> Backend & Public -> Backend -> a new file named
@@ -51,8 +51,9 @@ export const readCategoryNames = webMethod(Permissions.Anyone, async () => {
     }
     console.log('[AG/backend] read', Object.keys(names).length, 'collection names');
   } catch (err) {
-    /* The page code keeps a table for exactly this, so a failure here costs
-       freshness, not the menu. */
+    /* Nothing stands in for this any more. An empty map drops every piece into
+       "Works", and the gallery's own direct read of the store then supplies the
+       real names — so this costs the menu, not the artwork. */
     console.error('[AG/backend] could not read categories:', err);
   }
   return names;

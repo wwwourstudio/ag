@@ -60,15 +60,18 @@ import { currentCartV2 } from '@wix/ecom';
    backend file won't build — the diagnostic is worth more than the fix. */
 import { readCatalogSources } from 'backend/artworkCatalog.web';
 
-/* --- COLLECTION NAMES (optional) ---------------------------------------
-   Uncomment this line and the marked line in buildCatalog() to have the
-   Collections menu follow the store — renaming, adding or deleting a
-   collection in Wix then shows up on its own.
+/* --- COLLECTION NAMES ---------------------------------------------------
+   The Collections menu follows the store: rename a collection in Wix and the
+   menu renames, add or delete one and it appears or goes. There is no table of
+   names in this file any more — products carry category *ids*, and this is what
+   turns them into names.
 
-   Needs BOTH: `@wix/categories` installed (Packages & Apps -> npm) AND
-   backend/artworkCategories.web.js created. Without it the menu still works,
-   reading names from CATEGORY_NAMES below. */
-// import { readCategoryNames } from 'backend/artworkCategories.web';
+   REQUIRES: `@wix/categories` installed (Packages & Apps -> npm) AND
+   backend/artworkCategories.web.js created. Create both before pasting this
+   file. If the read fails, every piece lands in "Works" and the gallery's own
+   direct read of the store supplies the real names instead — see AGStore in
+   index.html. */
+import { readCategoryNames } from 'backend/artworkCategories.web';
 
 const HTML_ID = 'html1';
 const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
@@ -79,41 +82,10 @@ const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
    back to openSideCart() alone. */
 const CART_LIGHTBOX = 'lightbox1';
 
-/* The store's "All Products" category — every product is in it, so it is not a
-   collection worth showing in the menu. */
-const ALL_PRODUCTS = '97859c36-72bd-40f3-846d-3d8c533ea382';
-
-/* Category id -> the name shown in the gallery's Collections menu.
- *
- * FALLBACK ONLY. Products carry category *ids*, never names, so the names have
- * to be looked up — and the only API that does it is `@wix/categories`, which
- * failed to import here with "Cannot find module '@wix/categories'". That is
- * an npm package that has to be installed in the editor (Packages & Apps ->
- * npm), not a missing capability.
- *
- * backend/artworkCategories.web.js reads it and passes the live names through.
- * With that wired in the Collections menu follows the store: rename a
- * collection in Wix and the menu renames, add or delete one and it appears or
- * goes.
- *
- * Until then this table stands in. If you add or rename a collection, add it
- * here too. Anything missing is logged and the artwork falls back to "Works",
- * so a stale entry shows up as a wrong menu label, not a disappearance.
- */
-const CATEGORY_NAMES = {
-  '8e48dec4-59a1-4310-9bc5-ceb5c8bb1bb6': 'Crowned Girls',
-  '49bca492-5965-44fc-ba17-073624eb3659': 'Angels & Companions',
-  'dcd8b88c-b308-4348-9d38-091984855f70': 'Kind Words',
-  'b3c85211-c373-43d3-9fc7-46f5c66d402c': 'Night Studies',
-  /* The store also holds an older, empty copy of each of these four, left over
-     from when the collections were first set up. No product uses them today,
-     but tagging one would otherwise drop that piece into "Works" with only a
-     console warning to show for it. */
-  '137a6302-bc74-46dd-b0c7-9c81f60a823a': 'Crowned Girls',
-  'd3dd3b54-7dd7-4e41-a624-cdf7c9639b02': 'Angels & Companions',
-  '4bb9bafb-e7a0-4b42-b9e6-464fab1fe0f9': 'Kind Words',
-  'af1b64bc-8560-4068-acaa-1557547be445': 'Night Studies',
-};
+/* Every product sits in the store's "All Products" category, so it is not a
+   collection worth offering in the menu. Matched on the name the live read
+   gives back rather than an id, so a rebuilt store needs no edit here. */
+const ALL_PRODUCTS = 'all products';
 
 /* Info sections carry the gallery's metadata — Medium, Size, Year, Edition —
    as rich text on shared entities that products reference by id. All four are
@@ -311,14 +283,12 @@ function toArtwork(product, info, inventory, names) {
     (product.directCategoriesInfo && product.directCategoriesInfo.categories) || [];
   const collections = catRefs
     .map(idOf)
-    .filter((id) => id && id !== ALL_PRODUCTS)
     .map((id) => {
-      /* Live names when the backend read supplied them, the table otherwise. */
-      const name = (names && names[id]) || CATEGORY_NAMES[id];
-      if (!name) console.warn('[AG] no name for category', id, '- add it to CATEGORY_NAMES');
+      const name = names && names[id];
+      if (!name) console.warn('[AG] no name for category', id, '- is @wix/categories installed?');
       return name;
     })
-    .filter(Boolean);
+    .filter((name) => name && name.toLowerCase() !== ALL_PRODUCTS);
 
   const media = product.media && product.media.main && product.media.main.image;
 
@@ -387,10 +357,7 @@ async function buildCatalogViaBackend() {
     };
   }
 
-  /* COLLECTION NAMES: uncomment this and the import at the top of the file to
-     have the menu follow the store. Null means fall back to CATEGORY_NAMES. */
-  let names = null;
-  // names = await readCategoryNames();
+  const names = await readCategoryNames();
 
   const products = src.products || [];
   const artworks = products
@@ -408,6 +375,7 @@ async function buildCatalogViaBackend() {
 async function buildCatalogDirect() {
   const info = await loadInfoSections();
   const inventory = await loadInventory();
+  const names = await readCategoryNames();
 
   /* queryProducts does NOT return variant data, so each product is fetched
      individually for its variant ids and per-finish prices. Fine for a
@@ -452,7 +420,7 @@ async function buildCatalogDirect() {
      empty query, every getProduct failing, or every product being dropped for
      having no image, and those have nothing to do with each other. */
   const loaded = full.filter(Boolean);
-  const artworks = loaded.map((res) => toArtwork(res, info, inventory)).filter((a) => a.image);
+  const artworks = loaded.map((res) => toArtwork(res, info, inventory, names)).filter((a) => a.image);
   console.log('[AG] catalog (direct):', items.length, 'listed,', loaded.length, 'loaded,',
               artworks.length, 'with images');
   if (loaded.length && !artworks.length) {

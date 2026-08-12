@@ -160,17 +160,244 @@
     api.send({ type: "ready" });
     W.addEventListener("load", function () { api.send({ type: "ready" }); });
     setTimeout(function () { if (!api.catalog) api.send({ type: "ready" }); }, 1200);
-    /* Say so, once, when we are clearly inside Wix but the catalog never
-       came. The gallery still works off its baked snapshot — add to cart
-       included, since that carries variant ids — but prices and stock are
-       only as fresh as the last regeneration, so this should not go
-       unnoticed. */
+    /* Say so, once, when we are clearly inside Wix but the catalog never came.
+       Not fatal any more — AGStore below reads the same store directly — but it
+       means the Gallery page code is missing or silent, and add to cart goes
+       with it, so it should not pass unnoticed. */
     setTimeout(function () {
       if (!api.inWix || (api.catalog && api.catalog.length)) return;
-      console.error("[gallery] no catalog from the Wix page after 6s — running on the " +
-                    "baked snapshot, so prices and stock may be stale. Check the Gallery " +
-                    "page code is published and that HTML_ID matches this embed's element id.");
+      console.error("[gallery] no catalog from the Wix page after 6s — falling back to " +
+                    "reading the store directly. Add to cart needs the page code, so check " +
+                    "it is published and that HTML_ID matches this embed's element id.");
     }, 6000);
+  })();
+
+  /* --- Live store read ---------------------------------------------------
+     The gallery holds no artwork of its own. Every title, price, image,
+     collection and variant id below is read from the Wix store at load time,
+     so adding, editing or deleting a product in Wix is all it takes — nothing
+     here needs regenerating, and there is no snapshot to go stale.
+
+     Inside the Wix site the parent page also sends a catalog over postMessage
+     and that one wins, because it is the same read done with the site's own
+     permissions and it carries per-variant inventory counts. This path is what
+     makes the standalone page work, and what covers the embed when the page
+     code isn't answering.
+
+     CLIENT_ID is a Wix Headless client for this site. It is a public
+     identifier, not a secret: it only ever mints anonymous visitor tokens,
+     which can read publicly visible store data and nothing else. The client
+     secret is NOT here and must never be — visitor auth doesn't use one. */
+  (function () {
+    var W = window;
+    var CLIENT_ID = "ffe5a2fc-7aa9-42ad-95f8-0d4566f65031";
+    var API = "https://www.wixapis.com";
+    /* Wix stores the artwork as 2-6 MB PNGs. Ask the CDN for a resized JPEG
+       instead, or the gallery pulls ~50 MB of images on load. */
+    var IMG = "/v1/fit/w_1200,h_1200,q_85/file.jpg";
+    /* Every product sits in "All Products" too — not a collection worth
+       offering in the menu. Recognised by name so a rebuilt store still works. */
+    var ALL_PRODUCTS = "all products";
+
+    var store = { catalog: null, error: null, settled: false };
+    W.AGStore = store;
+
+    function post(path, token, body) {
+      var headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = token;
+      return fetch(API + path, {
+        method: "POST", headers: headers, body: JSON.stringify(body || {})
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) {
+            throw new Error(path + " → " + r.status + " " + String(t).slice(0, 200));
+          });
+        }
+        return r.json();
+      });
+    }
+
+    var idOf = function (o) { return o ? (o._id || o.id) : null; };
+    var money = function (n) {
+      return typeof n === "number" && !isNaN(n) ? "$" + n.toLocaleString("en-US") : "";
+    };
+    var num = function (v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
+    function webImage(url) {
+      if (!url) return "";
+      return url.indexOf("/v1/") !== -1 ? url : url + IMG;
+    }
+
+    /* Flatten Wix rich content down to the one line these fields hold. */
+    function richText(doc) {
+      var out = [];
+      (function walk(n) {
+        if (!n) return;
+        if (n.textData && n.textData.text) out.push(n.textData.text);
+        (n.nodes || []).forEach(walk);
+      })({ nodes: (doc && doc.nodes) || [] });
+      return out.join("").trim();
+    }
+
+    /* Which choice a variant made for a named option ("Format" -> "Print"). */
+    function choiceOf(variant, optionName) {
+      var list = variant.optionChoices || variant.choices || [];
+      for (var i = 0; i < list.length; i++) {
+        var names = list[i].optionChoiceNames || list[i] || {};
+        if (names.optionName === optionName) return names.choiceName;
+      }
+      return null;
+    }
+
+    /* One named info section's text, off a product.
+       A product may carry the shared section ("size") and its own more
+       specific one ("size-night-study-01"); the specific one wins. */
+    function sectionOf(product, info, key) {
+      var want = String(key).toLowerCase();
+      var shared = "";
+      var refs = product.infoSections || [];
+      for (var i = 0; i < refs.length; i++) {
+        var hit = info[idOf(refs[i])];
+        if (!hit) continue;
+        var name = String(hit.name || "").toLowerCase();
+        var title = String(hit.title || "").toLowerCase();
+        if (name === want || title === want) { if (!shared) shared = hit.text; continue; }
+        if (name.split("-")[0] === want) return hit.text;
+      }
+      return shared;
+    }
+
+    function toArtwork(product, info, variants, names) {
+      var mine = variants[idOf(product)] || [];
+      var origVariantId = null, origPrice = 0, origInStock = false;
+      var prints = {};
+
+      mine.forEach(function (v) {
+        var format = choiceOf(v, "Format");
+        var finish = choiceOf(v, "Paper Finish");
+        var price = num(v.price && v.price.actualPrice && v.price.actualPrice.amount);
+        var inStock = !!(v.inventoryStatus && v.inventoryStatus.inStock);
+        if (v.visible === false) return;
+        if (format === "Original") {
+          /* Prefer an in-stock original, but keep one either way so a sold
+             piece still shows its price rather than looking unpriced. */
+          if (!origVariantId || inStock) {
+            origVariantId = v.variantId || idOf(v);
+            origPrice = price;
+            origInStock = inStock;
+          }
+        } else if (format === "Print" && finish) {
+          prints[finish] = {
+            price: price, priceText: money(price), inStock: inStock,
+            variantId: v.variantId || idOf(v)
+          };
+        }
+      });
+
+      var finishes = Object.keys(prints);
+      var printPrice = finishes.length
+        ? Math.min.apply(null, finishes.map(function (f) { return prints[f].price; }))
+        : 0;
+
+      var refs = (product.directCategoriesInfo && product.directCategoriesInfo.categories) || [];
+      var collections = refs.map(function (r) { return names[idOf(r)]; })
+        .filter(function (n) { return n && n.toLowerCase() !== ALL_PRODUCTS; });
+
+      var media = product.media && product.media.main && product.media.main.image;
+
+      return {
+        id: idOf(product),
+        slug: product.slug,
+        url: (product.url && (product.url.url || product.url.relativePath)) ||
+             ("/product-page/" + product.slug),
+        image: webImage(media && media.url),
+        title: product.name || "Untitled",
+        medium: sectionOf(product, info, "medium"),
+        size: sectionOf(product, info, "size"),
+        year: sectionOf(product, info, "year"),
+        edition: parseInt(sectionOf(product, info, "edition"), 10) || 0,
+        collections: collections.length ? collections : ["Works"],
+        description: richText(product.description),
+        price: origPrice,
+        priceText: money(origPrice),
+        inStock: origInStock,
+        printPrice: printPrice,
+        prints: finishes.length ? prints : null,
+        origVariantId: origVariantId
+      };
+    }
+
+    function load() {
+      /* Anonymous visitor token: client id only, no secret involved. */
+      return post("/oauth2/token", null, { clientId: CLIENT_ID, grantType: "anonymous" })
+        .then(function (tok) {
+          var token = tok.access_token;
+          if (!token) throw new Error("no access_token in the token response");
+          return Promise.all([
+            post("/stores/v3/products/search", token, {
+              search: { cursorPaging: { limit: 100 } },
+              fields: ["DIRECT_CATEGORIES_INFO", "URL", "DESCRIPTION", "INFO_SECTION"]
+            }),
+            post("/stores/v3/products/query-variants", token, {
+              query: { cursorPaging: { limit: 1000 } }
+            }),
+            post("/stores/v3/info-sections/query", token, {
+              query: { cursorPaging: { limit: 100 } }
+            }),
+            post("/categories/v1/categories/query", token, {
+              query: { cursorPaging: { limit: 100 } }
+            })
+          ]);
+        })
+        .then(function (res) {
+          var products = res[0].products || [];
+
+          var byProduct = {};
+          (res[1].variants || []).forEach(function (v) {
+            var pid = (v.productData && v.productData.productId) || v.productId;
+            if (!pid) return;
+            (byProduct[pid] = byProduct[pid] || []).push(v);
+          });
+
+          var info = {};
+          (res[2].infoSections || []).forEach(function (s) {
+            var id = idOf(s);
+            if (id) info[id] = { name: s.uniqueName, title: s.title, text: richText(s.description) };
+          });
+
+          var names = {};
+          (res[3].categories || []).forEach(function (c) {
+            var id = idOf(c);
+            if (id) names[id] = c.name;
+          });
+
+          var artworks = products
+            .filter(function (p) { return p.visible !== false; })
+            .map(function (p) { return toArtwork(p, info, byProduct, names); })
+            .filter(function (a) { return a.image; });
+
+          console.log("[gallery] read the store directly:", products.length, "products,",
+                      artworks.length, "with images");
+          if (products.length && !artworks.length) {
+            console.error("[gallery] every product was dropped for having no main image.");
+          }
+          store.catalog = artworks;
+          return artworks;
+        });
+    }
+
+    function announce() {
+      store.settled = true;
+      /* Same event the parent-page catalog fires, so the component has one
+         arrival path to handle regardless of which source won. */
+      W.dispatchEvent(new CustomEvent("agwix:catalog", { detail: store.catalog || [] }));
+    }
+
+    load().then(announce, function (err) {
+      store.error = (err && err.message) || String(err);
+      console.error("[gallery] could not read the Wix store directly:", store.error);
+      announce();
+    });
   })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -442,10 +669,10 @@
 
         <aside data-lb-side="1" onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) var(--ag-cut, 0px); background: rgba(255,255,255,.55); border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
           <div style="display: flex; align-items: baseline; gap: 12px;">
-            <span ref="{{ lbCollection }}" style="font-size: 9px; letter-spacing: .24em; text-transform: uppercase; color: #2ea060;">Crowned Girls</span>
+            <span ref="{{ lbCollection }}" style="font-size: 9px; letter-spacing: .24em; text-transform: uppercase; color: #2ea060;"></span>
           </div>
           <div data-lb-titlewrap="1" ref="{{ lbTitleWrap }}" style="position: relative; margin-top: 16px; overflow: hidden; flex: none;">
-            <div data-lb-title="1" ref="{{ lbTitle }}" style="font-weight: 200; font-size: clamp(26px, 2.5vw, 38px); line-height: 1.12; letter-spacing: .012em; text-transform: uppercase; color: #14171a; white-space: nowrap; will-change: transform; transition: transform 4s linear;">Crowned Girl 01</div>
+            <div data-lb-title="1" ref="{{ lbTitle }}" style="font-weight: 200; font-size: clamp(26px, 2.5vw, 38px); line-height: 1.12; letter-spacing: .012em; text-transform: uppercase; color: #14171a; white-space: nowrap; will-change: transform; transition: transform 4s linear;"></div>
             <span ref="{{ lbTitleFade }}" style="position: absolute; top: 0; right: 0; bottom: 0; width: 46px; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(250,249,246,0) 0%, rgba(250,249,246,.95) 100%); transition: opacity .3s ease;"></span>
           </div>
           <div data-lb-artist="1" style="margin-top: 12px; display: flex; align-items: baseline; gap: .1em; text-transform: uppercase; line-height: .9; color: #14171a;">
@@ -456,7 +683,7 @@
           <div data-lb-specs="1" style="margin-top: 20px; display: flex; flex-direction: column; border-top: 1px solid rgba(20,23,26,.12);">
             <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
               <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Medium</span>
-              <span ref="{{ lbMedium }}" style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;">Mixed media on paper</span>
+              <span ref="{{ lbMedium }}" style="font-weight: 300; font-size: 14px; color: rgba(20,23,26,.86); text-align: right;"></span>
             </div>
             <div data-lb-spec="1" style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(20,23,26,.08);">
               <span style="font-size: 9px; letter-spacing: .28em; text-transform: uppercase; color: rgba(20,23,26,.42);">Dimensions</span>
@@ -474,7 +701,7 @@
               <span style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.62);">Original · one of one</span>
               <span ref="{{ lbOrigStatus }}" style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: #2ea060;">Available</span>
             </div>
-            <span ref="{{ lbOrigPrice }}" style="font-weight: 200; font-size: clamp(26px, 2.6vw, 34px); line-height: 1; letter-spacing: -.015em; color: #14171a;">$1,850</span>
+            <span ref="{{ lbOrigPrice }}" style="font-weight: 200; font-size: clamp(26px, 2.6vw, 34px); line-height: 1; letter-spacing: -.015em; color: #14171a;"></span>
             <a ref="{{ lbOrigBtn }}" href="{{ origLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 46px; padding: 0 18px; margin-top: 2px; border-radius: 999px; background: #14171a; color: #f5f3ef; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease;" style-hover="background: #2a2d33; color: #fff;">Buy now</a>
           </div>
 
@@ -495,10 +722,10 @@
 
             <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 9px; border-top: 1px solid rgba(20,23,26,.12);">
               <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
-                <span ref="{{ lbPrintPrice }}" style="font-weight: 200; font-size: clamp(20px, 2vw, 25px); line-height: 1; letter-spacing: -.015em; color: #14171a;">$220</span>
+                <span ref="{{ lbPrintPrice }}" style="font-weight: 200; font-size: clamp(20px, 2vw, 25px); line-height: 1; letter-spacing: -.015em; color: #14171a;"></span>
                 <span style="font-size: 10px; font-weight: 300; line-height: 1.35; color: rgba(20,23,26,.5);">Giclée · archival inkjet on fine-art paper</span>
               </span>
-              <span ref="{{ lbPrintLeft }}" style="font-size: 10px; font-weight: 300; white-space: nowrap; color: rgba(20,23,26,.5);">37 left</span>
+              <span ref="{{ lbPrintLeft }}" style="font-size: 10px; font-weight: 300; white-space: nowrap; color: rgba(20,23,26,.5);"></span>
             </div>
 
             <a ref="{{ lbPrintBtn }}" href="{{ printLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid #14171a; background: transparent; color: #14171a; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease, color .25s ease;" style-hover="background: #14171a; color: #f5f3ef; border-color: #14171a;">Buy print</a>
@@ -519,6 +746,14 @@
 
     </div>
   </sc-if>
+
+  <!-- Shown only while the store has given us nothing to hang on the wall:
+       either still loading, or unreachable. There is no snapshot to fall back
+       on by design, so this is what stands in place of stale artwork. -->
+  <div ref="{{ status }}" style="position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; display: none; text-align: center; font-family: Jost, sans-serif; font-weight: 300; letter-spacing: .08em; color: #1a1a1a; padding: 0 24px; pointer-events: none;">
+    <div ref="{{ statusText }}" style="font-size: clamp(15px, 1.6vw, 19px);"></div>
+    <div ref="{{ statusHint }}" style="margin-top: 10px; font-size: clamp(12px, 1.2vw, 14px); opacity: .55;"></div>
+  </div>
 
   <div ref="{{ loader }}" style="position: fixed; inset: 0; z-index: 9000; overflow: hidden; background: #07080a; transition: opacity .9s cubic-bezier(.6,0,.2,1);">
     <canvas ref="{{ loaderDust }}" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block;"></canvas>
@@ -552,458 +787,19 @@
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;idleSpin&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
-/* --- Baked Wix Stores catalog -----------------------------------------
-   Snapshot of the live Annie Green Wix store, used when the gallery runs
-   standalone (no Wix parent frame). Inside the Wix embed the bridge sends
-   the live catalog and this is ignored entirely. Regenerate with
-   tools/gen_catalog.py after changing products in Wix.
-   Images go through Wix media transforms so the browser never downloads
-   the multi-megabyte source PNGs. */
-const AG_CATALOG_FALLBACK = [
-    {
-      "id": "f783b558-a740-488f-9bb8-fa7236795ad7",
-      "slug": "night-study-02",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-02",
-      "image": "https://static.wixstatic.com/media/11062b_818116e459a94b2a933ec6c6ed9240c3~mv2.jpg/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Night Study 02",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Night Studies"
-      ],
-      "description": "Worked in a single sitting under lamplight, edges left raw.",
-      "price": 1550,
-      "priceText": "$1,550",
-      "inStock": true,
-      "printPrice": 245,
-      "prints": {
-        "Matte": {
-          "price": 245,
-          "priceText": "$245",
-          "inStock": true,
-          "variantId": "52c5e41a-6931-4b66-a2a6-cf5ee060348f"
-        },
-        "Gloss": {
-          "price": 270,
-          "priceText": "$270",
-          "inStock": true,
-          "variantId": "d4d56eae-6a57-4489-afdc-99043b60e685"
-        },
-        "Metallic": {
-          "price": 300,
-          "priceText": "$300",
-          "inStock": true,
-          "variantId": "d5914adf-33b1-4dd4-b58e-6ee8be01fc28"
-        }
-      },
-      "origVariantId": "816e14af-0848-4cfd-927b-53e648975bad"
-    },
-    {
-      "id": "5b42f4c0-482a-4bf1-a8fb-dd53a55272ce",
-      "slug": "night-study-01",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/night-study-01",
-      "image": "https://static.wixstatic.com/media/ee1cab_63ccb5c7f9a04966ae9dc7cdf006f946~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Night Study 01",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Night Studies"
-      ],
-      "description": "Deep indigo ground worked after dark, the figures emerging from the splatter.",
-      "price": 2400,
-      "priceText": "$2,400",
-      "inStock": true,
-      "printPrice": 320,
-      "prints": {
-        "Matte": {
-          "price": 320,
-          "priceText": "$320",
-          "inStock": true,
-          "variantId": "b0e9a263-00d9-4fa1-808f-580721dd5a0b"
-        },
-        "Gloss": {
-          "price": 345,
-          "priceText": "$345",
-          "inStock": true,
-          "variantId": "7d645b1c-1350-47ed-93ea-99107bd836ed"
-        },
-        "Metallic": {
-          "price": 375,
-          "priceText": "$375",
-          "inStock": true,
-          "variantId": "2bdeb2c5-bfdd-4b0c-8d20-ebf05063509a"
-        }
-      },
-      "origVariantId": "39358f47-8914-463c-a040-6f420299fdc4"
-    },
-    {
-      "id": "f02c87fb-47ea-49e5-9419-6007a6c691d8",
-      "slug": "small-mercies",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/small-mercies",
-      "image": "https://static.wixstatic.com/media/ee1cab_8fbaefc9dc324714a7213f5dcbcd54a9~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Small Mercies",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Kind Words"
-      ],
-      "description": "Marker and felt over collage, the lettering left deliberately unfinished.",
-      "price": 1100,
-      "priceText": "$1,100",
-      "inStock": false,
-      "printPrice": 185,
-      "prints": {
-        "Matte": {
-          "price": 185,
-          "priceText": "$185",
-          "inStock": true,
-          "variantId": "143be7a8-c176-4927-8fd2-a0235054706f"
-        },
-        "Gloss": {
-          "price": 210,
-          "priceText": "$210",
-          "inStock": true,
-          "variantId": "e6518819-5dbf-4e94-a960-5fb7358ed79e"
-        },
-        "Metallic": {
-          "price": 240,
-          "priceText": "$240",
-          "inStock": true,
-          "variantId": "acf21c85-1a13-4309-864f-f347885f16a4"
-        }
-      },
-      "origVariantId": "bd59d502-a3e2-421e-8008-3bd2e7aa8598"
-    },
-    {
-      "id": "d8f43217-047b-42ef-abb7-22f582131b9d",
-      "slug": "be-kind-to-yourself",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/be-kind-to-yourself",
-      "image": "https://static.wixstatic.com/media/ee1cab_6a0e83ef535f4fb5855525ce2f83ce02~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Be Kind to Yourself",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Kind Words"
-      ],
-      "description": "A stamped phrase pressed into the lower field, half-swallowed by the wash.",
-      "price": 980,
-      "priceText": "$980",
-      "inStock": true,
-      "printPrice": 175,
-      "prints": {
-        "Matte": {
-          "price": 175,
-          "priceText": "$175",
-          "inStock": true,
-          "variantId": "2142181d-039d-4534-a98c-1267542dc4c3"
-        },
-        "Gloss": {
-          "price": 200,
-          "priceText": "$200",
-          "inStock": true,
-          "variantId": "2c8b7f93-5e36-4d96-8b15-88b941fb9e76"
-        },
-        "Metallic": {
-          "price": 230,
-          "priceText": "$230",
-          "inStock": true,
-          "variantId": "954438f9-5bd4-4f05-a2a2-f39cf8609ebc"
-        }
-      },
-      "origVariantId": "167960ec-ca42-4bf6-bc08-0a46134d509d"
-    },
-    {
-      "id": "573bbcc0-55ef-4974-b403-1ed3d042a0ef",
-      "slug": "two-together",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/two-together",
-      "image": "https://static.wixstatic.com/media/ee1cab_6205b669b8a74ee185147b678078fc30~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Two Together",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Angels & Companions"
-      ],
-      "description": "Two figures on a bed of indigo splatter, one turned away, one facing out.",
-      "price": 1950,
-      "priceText": "$1,950",
-      "inStock": true,
-      "printPrice": 265,
-      "prints": {
-        "Matte": {
-          "price": 265,
-          "priceText": "$265",
-          "inStock": true,
-          "variantId": "c2880686-636c-4206-b059-f1bcb7ddac8e"
-        },
-        "Gloss": {
-          "price": 290,
-          "priceText": "$290",
-          "inStock": true,
-          "variantId": "516fcd40-5d2b-4b9f-b37a-ddd6226705c8"
-        },
-        "Metallic": {
-          "price": 320,
-          "priceText": "$320",
-          "inStock": true,
-          "variantId": "5f5d04c6-fb4d-4185-912c-190cc34a75b3"
-        }
-      },
-      "origVariantId": "9a2a4ccb-8263-4131-a2f4-e1528a21c325"
-    },
-    {
-      "id": "c058c9c5-312a-4f70-b7e4-4c7d32046100",
-      "slug": "the-keeper",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/the-keeper",
-      "image": "https://static.wixstatic.com/media/ee1cab_4d4525b27f7142eb95ab07949b9d4909~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "The Keeper",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Angels & Companions"
-      ],
-      "description": "Stitched patchwork and marker over a headscarfed figure, holding something unseen.",
-      "price": 1750,
-      "priceText": "$1,750",
-      "inStock": true,
-      "printPrice": 250,
-      "prints": {
-        "Matte": {
-          "price": 250,
-          "priceText": "$250",
-          "inStock": true,
-          "variantId": "4e9d9a4a-2c23-4738-ac50-97b79ecdf11f"
-        },
-        "Gloss": {
-          "price": 275,
-          "priceText": "$275",
-          "inStock": true,
-          "variantId": "dbff5af9-84c5-41db-a558-36209ebeaafc"
-        },
-        "Metallic": {
-          "price": 305,
-          "priceText": "$305",
-          "inStock": true,
-          "variantId": "4c6e9065-909a-4ab8-8374-7d40ca14d488"
-        }
-      },
-      "origVariantId": "f2e545e9-bc81-4e19-a4ed-f7d3c5c98b53"
-    },
-    {
-      "id": "cc1ab4d6-1b5a-4590-9056-a90e986d7ee6",
-      "slug": "angel-with-companion",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/angel-with-companion",
-      "image": "https://static.wixstatic.com/media/ee1cab_a9d875bd8f8f42e284e055512552d8c5~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Angel with Companion",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Angels & Companions"
-      ],
-      "description": "A veiled figure and her small keeper, worked on a ground of pressed blue.",
-      "price": 2100,
-      "priceText": "$2,100",
-      "inStock": true,
-      "printPrice": 280,
-      "prints": {
-        "Matte": {
-          "price": 280,
-          "priceText": "$280",
-          "inStock": true,
-          "variantId": "c4da832d-69ed-4ab7-9740-4f3babe18c6c"
-        },
-        "Gloss": {
-          "price": 305,
-          "priceText": "$305",
-          "inStock": true,
-          "variantId": "25ec3fe8-852d-427e-ac8d-1b5827377da6"
-        },
-        "Metallic": {
-          "price": 335,
-          "priceText": "$335",
-          "inStock": true,
-          "variantId": "f05e2f95-6907-4e78-a859-f8c36954af4f"
-        }
-      },
-      "origVariantId": "44702ef1-b2bc-432a-be72-89405369b3de"
-    },
-    {
-      "id": "a54d3ae3-e49c-4f94-8b54-a62a42e60f51",
-      "slug": "crowned-girl-04",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-04",
-      "image": "https://static.wixstatic.com/media/ee1cab_058fb98b3fbe4c9d84980e93a79e0c55~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Crowned Girl 04",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Crowned Girls"
-      ],
-      "description": "Warm reds worked over a printed ground, the crown drawn in a single unbroken line.",
-      "price": 1250,
-      "priceText": "$1,250",
-      "inStock": true,
-      "printPrice": 195,
-      "prints": {
-        "Matte": {
-          "price": 195,
-          "priceText": "$195",
-          "inStock": true,
-          "variantId": "f0f8e904-8014-4f9b-a574-9c76ee179a2e"
-        },
-        "Gloss": {
-          "price": 220,
-          "priceText": "$220",
-          "inStock": true,
-          "variantId": "79ac40a0-9d1c-4725-a471-b1b3dca7b591"
-        },
-        "Metallic": {
-          "price": 250,
-          "priceText": "$250",
-          "inStock": true,
-          "variantId": "e41877d9-4c7a-4516-a594-b88f2b412b0e"
-        }
-      },
-      "origVariantId": "09d72c14-7f5a-4eb4-a997-a7cc96b0ee35"
-    },
-    {
-      "id": "1aa22102-cdb5-42ce-92d8-0d65e8e933d2",
-      "slug": "crowned-girl-03",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-03",
-      "image": "https://static.wixstatic.com/media/ee1cab_7dfa9e7104084c43bb0e178be1942749~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Crowned Girl 03",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Crowned Girls"
-      ],
-      "description": "Ochre and gold ground, with a small figure held at the centre of the field.",
-      "price": 1650,
-      "priceText": "$1,650",
-      "inStock": false,
-      "printPrice": 240,
-      "prints": {
-        "Matte": {
-          "price": 240,
-          "priceText": "$240",
-          "inStock": true,
-          "variantId": "30273d91-a2f8-4ffc-a47c-c279326b70df"
-        },
-        "Gloss": {
-          "price": 265,
-          "priceText": "$265",
-          "inStock": true,
-          "variantId": "21dc7de9-0171-4221-b8e7-7aa4fe824ee2"
-        },
-        "Metallic": {
-          "price": 295,
-          "priceText": "$295",
-          "inStock": true,
-          "variantId": "c582d730-d3ac-4338-88c3-4d9e133269b6"
-        }
-      },
-      "origVariantId": "d12f5c9a-3eca-4e3c-b6d2-d0706f23650d"
-    },
-    {
-      "id": "99fa1741-dfea-4f42-b51a-c2e6ced6ad69",
-      "slug": "crowned-girl-02",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-02",
-      "image": "https://static.wixstatic.com/media/ee1cab_a211aec2eeae40dfa2327a8b084f9c09~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Crowned Girl 02",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Crowned Girls"
-      ],
-      "description": "A crowned figure worked in wash and pastel, her collar built from torn paper.",
-      "price": 1400,
-      "priceText": "$1,400",
-      "inStock": true,
-      "printPrice": 260,
-      "prints": {
-        "Matte": {
-          "price": 260,
-          "priceText": "$260",
-          "inStock": true,
-          "variantId": "b991da85-bc8a-4198-887b-4415bee97ecf"
-        },
-        "Gloss": {
-          "price": 285,
-          "priceText": "$285",
-          "inStock": true,
-          "variantId": "f6c14f06-0303-488b-a718-2357789e8684"
-        },
-        "Metallic": {
-          "price": 315,
-          "priceText": "$315",
-          "inStock": true,
-          "variantId": "faf3977d-c4cb-4ac2-8a09-cfbdc2e607e9"
-        }
-      },
-      "origVariantId": "d90498a2-0a55-4e1a-bafc-a82b4bc23a73"
-    },
-    {
-      "id": "0ac8e5d9-6768-4f6a-be49-fb2f4b51f442",
-      "slug": "crowned-girl-01",
-      "url": "https://ourstudioco.wixstudio.com/annie-green/product-page/crowned-girl-01",
-      "image": "https://static.wixstatic.com/media/ee1cab_5d385ee002454981873f4f5eddaa0c05~mv2.png/v1/fit/w_1200,h_1200,q_85/file.jpg",
-      "title": "Crowned Girl 01",
-      "medium": "Mixed media on paper",
-      "size": "16 x 20 in",
-      "year": 2024,
-      "edition": 50,
-      "collections": [
-        "Crowned Girls"
-      ],
-      "description": "Pastel, wash and collage built up around a single figure, with a stamped phrase set into the lower field.",
-      "price": 1850,
-      "priceText": "$1,850",
-      "inStock": true,
-      "printPrice": 220,
-      "prints": {
-        "Matte": {
-          "price": 220,
-          "priceText": "$220",
-          "inStock": true,
-          "variantId": "1bc8d176-e29e-487d-9e1b-e7c305889b05"
-        },
-        "Gloss": {
-          "price": 245,
-          "priceText": "$245",
-          "inStock": true,
-          "variantId": "7411214e-7673-4c9b-b408-7ddf32a12859"
-        },
-        "Metallic": {
-          "price": 275,
-          "priceText": "$275",
-          "inStock": true,
-          "variantId": "f208e2a8-d6ce-4c83-beef-59222d88ff62"
-        }
-      },
-      "origVariantId": "3de488af-c612-4576-b535-dd25a73f6fc4"
-    }
-  ];
+/* The catalog is read live from the Wix store on every load — see AGStore in
+   the <helmet> block above. Nothing about the artwork is baked into this file:
+   no titles, no prices, no image URLs, no variant ids. If the store can't be
+   reached the gallery says so rather than showing stale work. */
 
-/* Preferred order for the Collections menu, by slugified collection name. */
+/* Preferred order for the Collections menu, by slugified collection name.
+   A collection the store has that isn't named here still appears — it just
+   sorts after the ones that are. Deleting one in Wix removes it. */
 const AG_COL_ORDER = ["crowned-girls", "angels-companions", "kind-words", "night-studies"];
+
+/* Where to send someone if the gallery can't reach the store. Site config,
+   not catalogue data — it doesn't go stale when the artwork changes. */
+const AG_STORE_HOST = "ourstudioco.wixstudio.com/annie-green";
 
 class Component extends DCLogic {
   state = {
@@ -1022,17 +818,36 @@ class Component extends DCLogic {
   }
 
   /* --- Wix catalog helpers (added) --------------------------------------- */
+  /* Whichever live source answered first. Inside Wix that is normally the
+     parent page, which reads the store with the site's own permissions; the
+     direct read is running in parallel and covers the case where the page code
+     is missing or silent. Both are the live store — neither is a snapshot, so
+     there is no "stale but better than nothing" branch left to take. */
   catalog() {
-    const c = (window.AGWix && window.AGWix.catalog) || null;
-    if (c && c.length) return c;
-    return AG_CATALOG_FALLBACK;
+    const w = (window.AGWix && window.AGWix.catalog) || null;
+    if (w && w.length) return w;
+    const s = (window.AGStore && window.AGStore.catalog) || null;
+    if (s && s.length) return s;
+    return null;
   }
 
-  /* True only when a Wix parent frame actually supplied the catalog. Add to
-     cart needs the parent to talk to; standalone we link to the store page. */
+  /* True once either source has delivered. Add to cart still needs the parent
+     frame to talk to — see the variantId check at the buy button. */
   liveCatalog() {
-    const c = (window.AGWix && window.AGWix.catalog) || null;
+    const c = this.catalog();
     return !!(c && c.length);
+  }
+
+  /* What to say while there is nothing to show: null once artwork has
+     arrived, otherwise the line the loader holds on. */
+  catalogStatus() {
+    if (this.liveCatalog()) return null;
+    const err = (window.AGStore && window.AGStore.error) || null;
+    const done = window.AGStore && window.AGStore.settled;
+    if (err || done) {
+      return { failed: true, text: "The gallery could not reach the store." };
+    }
+    return { failed: false, text: "Loading the collection…" };
   }
 
   colKeyOf(label) {
@@ -1859,6 +1674,20 @@ class Component extends DCLogic {
           this.loaderEl.style.opacity = "0";
           this.loaderEl.style.pointerEvents = "none";
           setTimeout(() => { if (this.loaderEl) this.loaderEl.style.visibility = "hidden"; }, 1000);
+        }
+      }
+    }
+
+    /* Nothing on the wall yet — say which kind of nothing it is. */
+    if (this.statusEl) {
+      const st = this.catalogStatus();
+      this.statusEl.style.display = st ? "block" : "none";
+      if (st && this.statusTextEl && this.statusTextEl.textContent !== st.text) {
+        this.statusTextEl.textContent = st.text;
+        if (this.statusHintEl) {
+          this.statusHintEl.textContent = st.failed
+            ? "The artwork is listed at " + AG_STORE_HOST + "."
+            : "";
         }
       }
     }
