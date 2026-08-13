@@ -207,5 +207,23 @@ console.log("\nan image URL is found whatever shape the media arrives in");
   ok(/MEDIA_ITEMS_INFO/.test(backend), "the backend read asks for MEDIA_ITEMS_INFO");
 }
 
+// The loader's mark starts centred and scaled and flies to the corner, and the
+// dust has to ride that. Targets baked into canvas pixels are a snapshot of the
+// instant they were sampled — which is before the first transform lands, so the
+// dust assembled in the corner under a wordmark still out in the middle.
+console.log("\nthe loader's dust targets follow the wordmark rather than freezing");
+{
+  const build = html.match(/buildWordTargets\(dpr\) \{[\s\S]*?\n  \}/)[0];
+  ok(!/pts\.push\([^)]*target\.(left|top)/.test(build),
+     "sample time does not bake the wordmark's screen position into the points");
+  ok(/pts\.push\(\(x - x0\) \/ band, \(y - y0\) \/ band\)/.test(build),
+     "points are stored normalised to the wordmark's width");
+  ok(/wordBox\.x \+ this\.wordPts\[p\.wi\] \* wordBox\.w/.test(html),
+     "and resolved against the rect measured this frame");
+  ok(/getBoundingClientRect\(\);\s*\n\s*wordBox = \{/.test(html) ||
+     /const wb = this\.loaderWordEl\.getBoundingClientRect\(\)/.test(html),
+     "that rect is measured once per frame, not once per particle");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

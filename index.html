@@ -1233,16 +1233,33 @@ class Component extends DCLogic {
         }
         if (x1 < x0) return;
 
-        /* Uniform, driven by width: the same word at the same width is the same
-           word, and a separate vertical scale would only shear the glyphs. */
+        /* Store the points NORMALISED — u,v as fractions of the wordmark's
+           width — instead of as canvas pixels.
+
+           The mark does not sit still. On the way in it starts centred and
+           scaled up and flies to the corner, and the loader's copy is given the
+           gallery mark's transform every frame so the two move together. Points
+           baked into canvas pixels are a snapshot of one instant: sampling runs
+           once, early, before the first transform has been applied, so the dust
+           froze at the untransformed top-left box while the wordmark it was
+           supposed to become was still out in the middle of the screen. That is
+           the loader assembling a small wordmark in the corner under a large
+           one in the centre.
+
+           Normalised, they are resolved against the mark's live rect on every
+           frame, so the dust rides the same animation the mark does. Both axes
+           divide by the width so the aspect is preserved.
+
+           `2.6 / scale` keeps the sampling step at roughly the same on-screen
+           spacing whatever size the mark is when this runs. */
         const scale = target.width / (x1 - x0 + 1);
+        const band = x1 - x0 + 1;
         const step = Math.max(1, Math.round(2.6 / scale));
         const pts = [];
         for (let y = y0; y < y1; y += step) {
           for (let x = x0; x <= x1; x += step) {
             if (!opaque(x, y)) continue;
-            pts.push(((x - x0) * scale + target.left) * dpr,
-                     ((y - y0) * scale + target.top) * dpr);
+            pts.push((x - x0) / band, (y - y0) / band);
           }
         }
         if (pts.length > 8) { this.wordPts = pts; this.wordStart = performance.now(); }
@@ -1643,6 +1660,14 @@ class Component extends DCLogic {
          wordmark at all and the loader was just drifting dust. It no-ops once
          the points are built. */
       if (inLoader && !this.wordPts) this.buildWordTargets(dpr);
+      /* This frame's wordmark rect, in canvas pixels. One measurement for the
+         whole particle loop — getBoundingClientRect per particle would be
+         thousands of forced layouts a frame. */
+      let wordBox = null;
+      if (inLoader && this.wordPts && this.loaderWordEl) {
+        const wb = this.loaderWordEl.getBoundingClientRect();
+        wordBox = { x: wb.left * dpr, y: wb.top * dpr, w: wb.width * dpr };
+      }
       const w = cv.width, h = cv.height;
       ctx.clearRect(0, 0, w, h);
       const fade = inLoader ? 1 : Math.max(0, 1 - (this.wW || 0) * 1.6);
@@ -1679,7 +1704,7 @@ class Component extends DCLogic {
           }
           const damp = 0.955;
           p.ox *= damp; p.oy *= damp;
-          if (inLoader && this.wordPts) {
+          if (inLoader && this.wordPts && wordBox) {
             if (p.wi === undefined) { const tot = this.wordPts.length / 2; p.wi = 2 * Math.min(tot - 1, Math.floor((i2 / P.length) * tot)); }
             if (p.lag === undefined) p.lag = Math.random() * 0.42;
             const raw = (performance.now() - this.wordStart) / 3200;
@@ -1688,8 +1713,14 @@ class Component extends DCLogic {
             const settle = Math.max(0, (raw - 1) / 0.55);
             const jr = Math.max(0, 1 - Math.min(1, settle)) * 2.2;
             const jx = Math.sin(p.ph * 5.1 + raw * 2) * jr * dpr, jy = Math.cos(p.ph * 3.7 + raw * 2) * jr * dpr;
-            sx += (this.wordPts[p.wi] + jx - sx) * e;
-            sy += (this.wordPts[p.wi + 1] + jy - sy) * e;
+            /* wordPts are fractions of the wordmark's width; `wordBox` is this
+               frame's rect for it, measured once above rather than per
+               particle. Resolving here rather than at sample time is what lets
+               the dust follow the mark while it is still flying in. */
+            const tx = wordBox.x + this.wordPts[p.wi] * wordBox.w;
+            const ty = wordBox.y + this.wordPts[p.wi + 1] * wordBox.w;
+            sx += (tx + jx - sx) * e;
+            sy += (ty + jy - sy) * e;
             p.lit = e;
             if (raw > 1.12 && !this._wordLit) {
               this._wordLit = 1;
