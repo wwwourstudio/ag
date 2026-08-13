@@ -122,5 +122,25 @@ console.log("\npricing off whatever variants the store sent");
   ok(c.printTotal(works[0]) === 145, `metallic print total 145 (got ${c.printTotal(works[0])})`);
 }
 
+// The direct read is the only source a standalone visitor has, and it is one
+// Promise.all: a single malformed call blanks the entire gallery. These pin the
+// two things that made that happen.
+console.log("\nthe direct store read is shaped the way the API expects");
+{
+  const store = html.match(/--- Live store read[\s\S]*?<\/script>/)[0];
+  ok(!/categories\/v1\/categories\/query/.test(store),
+     "no categories/query — that endpoint 400s, the Catalog V3 read is categories/search");
+  ok(/categories\/v1\/categories\/search/.test(store),
+     "collection names come from categories/search");
+  const cat = store.match(/categories\/v1\/categories\/search[\s\S]{0,320}/)[0];
+  ok(/treeReference[\s\S]{0,60}@wix\/stores/.test(cat),
+     "the category call carries treeReference: @wix/stores (required, or it 400s)");
+  ok(/soft\("collection names"/.test(store) && /soft\("info sections"/.test(store),
+     "labels (categories, info sections) can't take the catalog down with them");
+  ok(/post\("\/stores\/v3\/products\/search"/.test(store) &&
+     !/soft\([^)]*products\/search/.test(store),
+     "products stay fatal — there is no gallery without them");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
