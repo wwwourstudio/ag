@@ -303,8 +303,13 @@ async function loadInventory() {
   inventoryByVariant = {};
   try {
     /** @type {any} */
+    /* 1000, not 100. The store holds 66 inventory rows today (11 products x 6
+       variants) — already two thirds of the old ceiling — and the API's maximum
+       for this method is 1000. At around 17 products the read would have
+       truncated in silence: leftOf() returns 0, the "N left" label disappears,
+       and nothing is logged. Past 1000 this needs a real cursor loop. */
     const res = await inventoryItemsV3.searchInventoryItems({
-      cursorPaging: { limit: 100 },
+      cursorPaging: { limit: 1000 },
     });
     for (const it of res.inventoryItems || res.items || []) {
       /* The variant reference has moved around between shapes; read all of
@@ -387,9 +392,17 @@ function toArtwork(product, info, inventory, names) {
     .filter((name) => name && name.toLowerCase() !== ALL_PRODUCTS);
 
   /* `media.main` is read-only and derived from the first entry of
-     `media.itemsInfo.items`, and both only arrive when MEDIA_ITEMS_INFO is in
-     the fields projection — so read main first and fall back to the items
-     array, rather than letting a product vanish because main was not derived.
+     `media.itemsInfo.items`. Read main first and fall back to the items array,
+     rather than letting a product vanish because main was not derived.
+
+     On WHY MEDIA_ITEMS_INFO is in the projection, an earlier version of this
+     comment had the mechanism backwards. Measured against this store: a request
+     with NO fields projection returns `media.main` populated and `itemsInfo`
+     null. It is supplying a projection that narrows the response — ask for
+     five fields and none of them media, as this did, and media comes back
+     empty, which is how eleven products arrived image-less. So the rule is not
+     "main needs the field", it is "once you project, you get only what you
+     project". Same reason PLAIN_DESCRIPTION had to be added beside it. */
 
      Read through imageUrl(), not `.image.url` directly. REST returns `image` as
      an object carrying a url, but the SDK has also handed back a bare string —
