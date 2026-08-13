@@ -40,20 +40,26 @@
 
 import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
 /* --- SITE MODULES -------------------------------------------------------
-   This is a Wix Studio site, so the site APIs are the namespaced `@wix/site-*`
-   packages. The classic Velo specifiers do not resolve in this editor:
+   These are the classic Velo specifiers, and they are correct for this site.
 
-     wix-location       -> @wix/site-location
-     wix-window         -> @wix/site-window     (the editor suggests this one
-                                                 by name in the error)
-     wix-ecom-frontend  -> resolved lazily below
+   The editor red-underlines `wix-window` and `wix-ecom-frontend` with
+   "Cannot find module ... or its corresponding type declaration", and offers
+   `@wix/site-window` as a spelling suggestion. That is the TypeScript service
+   missing a type declaration, NOT the bundler failing to resolve the module —
+   the page still builds and the calls still work. The `@wix/site-*` packages
+   are genuinely absent here, so taking the suggestion replaces a cosmetic
+   squiggle with a real failure.
 
-   This matters more than a rename. An unresolvable specifier fails the WHOLE
-   page code — no catalog, no cart, no message handler — which is how a cart
-   convenience module ends up blanking the gallery. Only modules the artwork
-   genuinely depends on are imported statically. */
-import { location as siteLocation } from '@wix/site-location';
-import { window as siteWindow } from '@wix/site-window';
+   Tell the two apart by where the message comes from. A build error names the
+   file and appears in the deploy log with Status: Error, like the one that
+   actually broke this page:
+
+     [/pages/Gallery.c1dmp.js]: Cannot find module 'backend/artworkCategories.web'
+
+   A squiggle in the editor gutter is a type lookup and can be ignored. */
+import wixLocation from 'wix-location';
+import wixEcomFrontend from 'wix-ecom-frontend';
+import wixWindow from 'wix-window';
 import { currentCartV2 } from '@wix/ecom';
 
 /* --- BACKEND CATALOG ---------------------------------------------------
@@ -505,47 +511,9 @@ function inventoryRefusal(err) {
 /* The SDK writes straight to the cart, which leaves the page's cart UI showing
    stale data — only refreshCart() makes the cart icon and side cart re-read it.
    Refresh before opening the panel, so it opens already showing the artwork. */
-/* The cart-UI module under two names: `@wix/site-ecom` on Wix Studio and
-   `wix-ecom-frontend` on classic Velo. Resolved at call time rather than
-   imported, because this module drives a *flourish* — refreshing the cart icon
-   and sliding the panel out — and a static import of the wrong one of those two
-   names fails the entire page code. The purchase completes without it.
-
-   The literal specifiers are deliberate: a variable would defeat the bundler.
-   Whichever name this editor knows resolves; the other throws and is swallowed. */
-let ecomModule;
-async function ecom() {
-  if (ecomModule !== undefined) return ecomModule;
-  try {
-    ecomModule = await import('@wix/site-ecom');
-  } catch (studioErr) {
-    try {
-      ecomModule = await import('wix-ecom-frontend');
-    } catch (veloErr) {
-      console.warn('[AG] no cart-UI module (@wix/site-ecom or wix-ecom-frontend); ' +
-                   'adds still work, the panel just will not open itself:', veloErr);
-      ecomModule = null;
-    }
-  }
-  return ecomModule;
-}
-
-/* Both names have been used for these two calls across SDK versions, so try
-   each. Missing entirely is survivable — see ecom() above. */
-/** @param {any} mod @param {string[]} names */
-const callable = (mod, names) => {
-  if (!mod) return null;
-  for (const n of names) {
-    const fn = mod[n] || (mod.cart && mod.cart[n]);
-    if (typeof fn === 'function') return fn.bind(mod.cart || mod);
-  }
-  return null;
-};
-
 async function refreshCartUI() {
   try {
-    const fn = callable(await ecom(), ['refreshCart']);
-    if (fn) await fn();
+    await wixEcomFrontend.refreshCart();
   } catch (err) {
     console.error('[AG] could not refresh the cart UI:', err);
   }
@@ -606,7 +574,7 @@ function openLightboxNamed(i) {
 
   let opening;
   try {
-    opening = siteWindow.openLightbox(names[i]);
+    opening = wixWindow.openLightbox(names[i]);
   } catch (err) {
     openLightboxNamed(i + 1);
     return;
@@ -616,10 +584,9 @@ function openLightboxNamed(i) {
   }
 }
 
-async function openSideCart() {
+function openSideCart() {
   try {
-    const fn = callable(await ecom(), ['openSideCart', 'showCart', 'openCart']);
-    if (fn) fn();
+    wixEcomFrontend.openSideCart();
   } catch (err) {
     /* Sites still on the old Mini Cart have no side cart to open (and it
        throws outright on mobile there). The item is in the cart either way,
@@ -667,7 +634,7 @@ $w.onReady(function () {
     }
 
     if (msg.type === 'openProduct') {
-      siteLocation.to(msg.url || '/product-page/' + msg.slug);
+      wixLocation.to(msg.url || '/product-page/' + msg.slug);
       return;
     }
 

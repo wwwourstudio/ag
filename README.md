@@ -96,11 +96,17 @@ which stopped the page code building at all — no catalog, no add-to-cart. The
 gallery reads the categories itself now (`AGStore` in `index.html`), so the names
 survive without it. The file is kept in `wix/backend/` for reference only.
 
-This is a **Wix Studio** site, so the site APIs are the namespaced packages —
-`@wix/site-location`, `@wix/site-window`. The classic `wix-location` /
-`wix-window` / `wix-ecom-frontend` specifiers do not resolve here and fail the
-build the same way. The cart-UI module is resolved at call time under both names,
-so it cannot take the page down.
+The site modules stay on the classic Velo specifiers — `wix-location`,
+`wix-window`, `wix-ecom-frontend`. The editor red-underlines the last two with
+`Cannot find module ... or its corresponding type declaration` and suggests
+`@wix/site-window`; **ignore it.** That is the TypeScript service missing a type
+declaration, not the bundler failing to resolve the module. The `@wix/site-*`
+packages are not installed here, so taking the suggestion turns a cosmetic
+squiggle into a real build failure.
+
+Tell the two apart by where the message appears. A build error names the file and
+shows in the deploy log under `Status: Error`. A squiggle in the editor gutter is
+a type lookup.
 
 - Not `data.js`, not a Public file: `$w` and `wix-location` exist only in page
   code, and using them elsewhere fails with
