@@ -199,7 +199,7 @@
        offering in the menu. Recognised by name so a rebuilt store still works. */
     var ALL_PRODUCTS = "all products";
 
-    var store = { catalog: null, error: null, settled: false };
+    var store = { catalog: null, error: null, settled: false, blurbs: {} };
     W.AGStore = store;
 
     function post(path, token, body) {
@@ -361,9 +361,14 @@
             soft("info sections", post("/stores/v3/info-sections/query", token, {
               query: { cursorPaging: { limit: 100 } }
             })),
+            /* DESCRIPTION is a requested field here exactly as it is on
+               products: ask and you get the category's header description,
+               don't and it is absent. That text becomes the standfirst under
+               the collection heading on the wall. */
             soft("collection names", post("/categories/v1/categories/search", token, {
               search: { cursorPaging: { limit: 100 } },
-              treeReference: { appNamespace: "@wix/stores" }
+              treeReference: { appNamespace: "@wix/stores" },
+              fields: ["DESCRIPTION"]
             }))
           ]);
         })
@@ -383,11 +388,19 @@
             if (id) info[id] = { name: s.uniqueName, title: s.title, text: richText(s.description) };
           });
 
-          var names = {};
+          var names = {}, blurbs = {};
           (res[3].categories || []).forEach(function (c) {
             var id = idOf(c);
-            if (id) names[id] = c.name;
+            if (!id) return;
+            names[id] = c.name;
+            /* Keyed by NAME, not id: the parent page sends collection names
+               with no ids at all, so the name is the only thing the two
+               sources share. */
+            if (c.name && typeof c.description === "string" && c.description) {
+              blurbs[c.name] = c.description;
+            }
           });
+          store.blurbs = blurbs;
 
           var artworks = products
             .filter(function (p) { return p.visible !== false; })
@@ -637,6 +650,14 @@
         <span data-glass="1" style="position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(112deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 44%, rgba(255,255,255,0) 64%, rgba(255,255,255,.16) 80%, rgba(255,255,255,.34) 100%);"></span>
       </div>
     </sc-for>
+  </div>
+
+  <!-- Wall heading. The collection the wall is currently showing, with the
+       store's header description under it. Sits above the artwork and fades in
+       with the wall itself, so the sphere never carries it. -->
+  <div ref="{{ wallHead }}" style="position: absolute; left: 50%; top: clamp(70px, 10vh, 124px); transform: translateX(-50%); z-index: 900; width: min(760px, 84vw); text-align: center; opacity: 0; pointer-events: none;">
+    <h2 ref="{{ wallHeadTitle }}" style="margin: 0; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(14px, 1.5vw, 19px); font-weight: 400; letter-spacing: .22em; text-transform: uppercase; color: rgba(20,23,26,.84);"></h2>
+    <p ref="{{ wallHeadBlurb }}" style="margin: 11px auto 0; max-width: 58ch; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(11.5px, 1.02vw, 13.5px); font-weight: 300; line-height: 1.66; color: rgba(20,23,26,.55); text-wrap: pretty;"></p>
   </div>
 
   <div ref="{{ vignette }}" style="position: absolute; inset: 0; z-index: 2500; pointer-events: none; background: radial-gradient(122% 84% at 50% 47%, rgba(20,23,26,0) 46%, rgba(20,23,26,.07) 74%, rgba(20,23,26,.19) 100%);"></div>
@@ -936,7 +957,14 @@ class Component extends DCLogic {
       return k < 0 ? AG_COL_ORDER.length : k;
     };
     list.sort((a, b) => rank(a) - rank(b));
-    this._cols = [{ key: "all", label: "View all" }].concat(list);
+    /* The header description the store keeps against each category, if it has
+       one. Comes from the direct read (AGStore), which is the only source that
+       fetches categories at all — so a collection the parent page named but the
+       direct read never saw simply has no standfirst, and the wall shows the
+       heading alone. */
+    const blurbs = (window.AGStore && window.AGStore.blurbs) || {};
+    list.forEach(c => { c.blurb = blurbs[c.label] || ""; });
+    this._cols = [{ key: "all", label: "View all", blurb: "" }].concat(list);
     return this._cols;
   }
 
@@ -1075,13 +1103,30 @@ class Component extends DCLogic {
     return this._works;
   }
 
+  /* Membership, not primary collection. A piece sits in several categories at
+     once, so the store's own counts add up to far more than the number of
+     works — `colKeys` is the truth and `colKey` is only the first of them,
+     kept for the wall's heading.
+
+     The menu's counts used to be computed with `colKey` while the filtering
+     below used `colKeys`, so the menu advertised 5 and then showed 11. One
+     predicate now, used by both, because two copies of this rule is exactly how
+     they drifted apart.
+     @param {any} w @param {string} key */
+  inCollection(w, key) {
+    if (key === "all") return true;
+    return w.colKeys ? w.colKeys.indexOf(key) >= 0 : w.colKey === key;
+  }
+
+  countIn(key) {
+    return this.workData().filter(w => this.inCollection(w, key)).length;
+  }
+
   visible() {
     const col = this.collectionData()[this.state.col];
     const all = this.workData();
     if (!col || col.key === "all") return all.map(w => w.i);
-    return all
-      .filter(w => (w.colKeys ? w.colKeys.indexOf(col.key) >= 0 : w.colKey === col.key))
-      .map(w => w.i);
+    return all.filter(w => this.inCollection(w, col.key)).map(w => w.i);
   }
 
   componentDidMount() {
@@ -1667,6 +1712,17 @@ class Component extends DCLogic {
     if (inLoader) this.buildWordTargets(dpr);
     const loop = () => {
       if (this.token !== window.__galToken) return;
+      /* The loader's dust is a set piece with 2400-3600 particles, and it used
+         to keep drawing every one of them for the life of the page — behind a
+         hidden element, forever, plus a forced layout per frame from the
+         wordmark rect measured here. Nothing was watching it because nothing
+         was visible. Once the loader is done this canvas has no audience, so
+         stop scheduling and clear what is on it. */
+      if (inLoader && this.loaded) {
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        this.wordPts = null;
+        return;
+      }
       requestAnimationFrame(loop);
       if (Math.max(1, Math.round(cv.clientWidth * dpr)) !== cv.width) size();
       /* Keep asking until the wordmark targets exist. buildWordTargets used to
@@ -1835,14 +1891,35 @@ class Component extends DCLogic {
       }
     }
 
-    /* Desktop used to frame the sphere so tightly that only 5 or 6 of eleven
-       pieces were on screen at once and a single artwork could span 719px of a
-       1440px window — you spun it and still saw almost nothing. Pulling the
-       radius in, shrinking the cards and pushing the camera back puts all
-       eleven in frame at 143-203px each, measured. Mobile keeps its own numbers:
-       the screen is small enough that fewer, larger cards is the right call. */
-    const R = narrow ? mn * 0.92 : mn * 0.66;
-    const fitS = narrow ? mn / 620 : mn / 1700;
+    /* THE SPHERE GROWS WITH THE CATALOGUE.
+
+       Fixed numbers only ever suit one catalogue size. Tuned for eleven works
+       they were far too tight — 5 or 6 pieces on screen and one card spanning
+       half the window — and tuned for eleven the other way they would pack a
+       fifty-piece store into a solid ball of overlapping paper.
+
+       So both the radius and the card size follow N. The surface of a sphere
+       grows as R squared, so to keep roughly the same share of it covered as
+       pieces are added, R scales with sqrt(N) and the cards shrink with its
+       inverse. Both are clamped: below the floor a small catalogue would sit in
+       a huge empty ball, above the ceiling the cards would be thumbnails.
+
+       At the eleven works this store holds today that lands close to the values
+       measured in the browser, but with headroom — cards are a little larger
+       than the pass that over-corrected them, and a fifty-piece catalogue
+       spreads out instead of congealing. */
+    const REF = 11;                                   /* what the numbers were tuned against */
+    const ratio = Math.max(1, N) / REF;
+    /* The radius grows more slowly than the count, and the cards carry the
+       rest. Letting R track sqrt(N) properly pushed a fifty-piece sphere so
+       wide that only eight pieces were on screen — technically not a solid
+       ball, but you had lost the gallery. These exponents were picked by
+       measuring 5, 11, 25 and 50 works in the browser. */
+    const spread = Math.min(1.5, Math.max(0.85, Math.pow(ratio, 0.34)));
+    const shrink = Math.min(1.15, Math.max(0.5, Math.pow(1 / ratio, 0.42)));
+
+    const R = (narrow ? mn * 0.92 : mn * 0.70) * spread;
+    const fitS = (narrow ? mn / 620 : mn / 1180) * shrink;
     const f = narrow ? 1500 : 2750;
 
     /* A vertical drag tumbles the sphere on X, deliberately unclamped — the
@@ -1942,6 +2019,30 @@ class Component extends DCLogic {
         const c = ((Math.round(this.pan / gap) % N) + N) % N;
         this.counterEl.textContent = String(c + 1).padStart(2, "0") + " / " + String(N).padStart(2, "0");
       } else this.counterEl.textContent = N + (N === 1 ? " work" : " works");
+    }
+
+    /* The wall's heading: which collection is on the wall, and whatever the
+       store keeps as that category's header description. Tied to `m`, the same
+       weight that fades the wall in, so it is absent in the sphere and never
+       has to be toggled separately. "View all" is the gallery as a whole rather
+       than a collection, so it gets the artist's name instead of the word.
+       Text is written only when it changes — this runs every frame. */
+    if (this.wallHeadEl) {
+      this.wallHeadEl.style.opacity = (m * chromeIn).toFixed(3);
+      const col = this.collectionData()[this.state.col];
+      const title = !col || col.key === "all" ? "Selected works" : col.label;
+      const blurb = (col && col.blurb) || "";
+      if (this._headTitle !== title) {
+        this._headTitle = title;
+        if (this.wallHeadTitleEl) this.wallHeadTitleEl.textContent = title;
+      }
+      if (this._headBlurb !== blurb) {
+        this._headBlurb = blurb;
+        if (this.wallHeadBlurbEl) {
+          this.wallHeadBlurbEl.textContent = blurb;
+          this.wallHeadBlurbEl.style.display = blurb ? "" : "none";
+        }
+      }
     }
 
     const GA = Math.PI * (3 - Math.sqrt(5));
@@ -2096,7 +2197,7 @@ class Component extends DCLogic {
       works: this.workData().map(w => ({ i: w.i, src: w.src })),
       collections: this.collectionData().map((c, i) => ({
         i, label: c.label,
-        count: c.key === "all" ? this.workData().length : this.workData().filter(w => w.colKey === c.key).length
+        count: this.countIn(c.key)
       })),
       stage: el => { this.stageEl = el; },
       wall: el => { this.wallEl = el; },
@@ -2121,6 +2222,9 @@ class Component extends DCLogic {
       toggleCol: () => this.setState({ colOpen: !this.state.colOpen }),
       hint: el => { this.hintEl = el; },
       counter: el => { this.counterEl = el; },
+      wallHead: el => { this.wallHeadEl = el; },
+      wallHeadTitle: el => { this.wallHeadTitleEl = el; },
+      wallHeadBlurb: el => { this.wallHeadBlurbEl = el; },
       blobA: el => { this.blobAEl = el; },
       blobB: el => { this.blobBEl = el; },
       blobC: el => { this.blobCEl = el; },
