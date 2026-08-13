@@ -169,6 +169,41 @@ const num = (v) => {
 
 /* Wix stores the artwork as 2-6 MB PNGs. Serve a resized JPEG instead, or the
    gallery pulls down ~50 MB of images on load. */
+/* Pull a usable URL out of a media entry, whatever shape it arrives in.
+
+   REST (verified against this store) returns:
+     { id, mediaType, image: { id, url: 'https://static.wixstatic.com/media/…' } }
+
+   but `image` has also come back as a bare string, either an ordinary https URL
+   or Wix's internal `wix:image://v1/<mediaId>/<filename>#originWidth=…` form.
+   Reading `.url` off a string yields undefined without throwing, which is how
+   eleven perfectly good artworks were silently dropped. Handle all three.
+   @param {any} entry */
+function imageUrlOf(entry) {
+  if (!entry) return '';
+  const img = entry.image || entry;
+  if (typeof img === 'string') {
+    const internal = img.match(/^wix:image:\/\/v1\/([^/#]+)/);
+    if (internal) return 'https://static.wixstatic.com/media/' + internal[1];
+    return img.indexOf('http') === 0 ? img : '';
+  }
+  return (img && img.url) || '';
+}
+
+/* When an artwork has no usable image, print the media object ONCE, expanded.
+   The previous message logged `media:` and the browser collapsed it to `{...}`,
+   which said nothing — the whole point of the line is to show the shape that
+   defeated imageUrlOf. Once, because eleven identical dumps is the spam that
+   hid this bug for as long as it did. */
+let mediaShapeReported = false;
+/** @param {any} product */
+function reportMediaShape(product) {
+  if (mediaShapeReported) return;
+  mediaShapeReported = true;
+  console.error('[AG] no usable image for "' + (product && product.name) +
+                '". media as JSON:', JSON.stringify(product && product.media));
+}
+
 function webImage(url, px) {
   if (!url) return '';
   if (url.indexOf('/v1/') !== -1) return url;
@@ -319,20 +354,23 @@ function toArtwork(product, info, inventory, names) {
     .filter((name) => name && name.toLowerCase() !== ALL_PRODUCTS);
 
   /* `media.main` is read-only and derived from the first entry of
-     `media.itemsInfo.items` — and it only arrives when MEDIA_ITEMS_INFO is in
-     the fields projection. Without it every product came back with an empty
-     media object, toArtwork produced no image, the `.filter((a) => a.image)`
-     below dropped all eleven, and the console read
+     `media.itemsInfo.items`, and both only arrive when MEDIA_ITEMS_INFO is in
+     the fields projection — so read main first and fall back to the items
+     array, rather than letting a product vanish because main was not derived.
+
+     Read through imageUrl(), not `.image.url` directly. REST returns `image` as
+     an object carrying a url, but the SDK has also handed back a bare string —
+     and `('https://...').url` is undefined, which is silent. That produced
 
        [AG] catalog (backend): 11 loaded, 0 with images
        [AG] every product was dropped for having no main image
 
-     Read the items array as well as main, so a product whose main has not been
-     derived still shows its first image rather than vanishing. */
+     against a store whose products all had perfectly good images. */
   const items = (product.media && product.media.itemsInfo &&
                  product.media.itemsInfo.items) || [];
-  const media = (product.media && product.media.main && product.media.main.image) ||
-                (items.length && items[0] && items[0].image) || null;
+  const imageUrl = imageUrlOf(product.media && product.media.main) ||
+                   imageUrlOf(items[0]);
+  if (!imageUrl) reportMediaShape(product);
 
   return {
     id: idOf(product),
@@ -340,7 +378,7 @@ function toArtwork(product, info, inventory, names) {
     url:
       (product.url && (product.url.url || product.url.relativePath)) ||
       '/product-page/' + product.slug,
-    image: webImage(media && media.url, 1200),
+    image: webImage(imageUrl, 1200),
     title: product.name || 'Untitled',
     medium: sectionOf(product, info, 'medium'),
     size: sectionOf(product, info, 'size'),
@@ -409,7 +447,8 @@ async function buildCatalogViaBackend() {
               artworks.length, 'with images');
   if (products.length && !artworks.length) {
     console.error('[AG] every product was dropped for having no main image. First one:',
-                  products[0] && products[0].name, 'media:', products[0] && products[0].media);
+                  products[0] && products[0].name,
+                  'media as JSON:', JSON.stringify(products[0] && products[0].media));
   }
   return artworks;
 }
@@ -468,7 +507,8 @@ async function buildCatalogDirect() {
               artworks.length, 'with images');
   if (loaded.length && !artworks.length) {
     console.error('[AG] every product was dropped for having no main image. First one:',
-                  loaded[0] && loaded[0].name, 'media:', loaded[0] && loaded[0].media);
+                  loaded[0] && loaded[0].name,
+                  'media as JSON:', JSON.stringify(loaded[0] && loaded[0].media));
   }
   return artworks;
 }
@@ -615,11 +655,13 @@ async function sendCatalog() {
     const artworks = await buildCatalog();
     console.log('[AG] sending', artworks.length, 'artworks to the gallery');
     /* An empty catalog is a failure that doesn't throw: the gallery treats it
-       exactly like silence and falls back to its baked snapshot, so say so
-       here rather than letting it look like a clean run. */
+       exactly like silence, so say so here rather than letting it look like a
+       clean run. There is no snapshot to fall back to any more — an empty
+       catalog means an empty wall. */
     if (!artworks.length) {
-      console.error('[AG] built 0 artworks — the gallery will fall back to its baked ' +
-                    'snapshot. Check the store has visible products with a main image.');
+      console.error('[AG] built 0 artworks — the gallery has nothing to hang. The store ' +
+                    'read succeeded, so check the media dump above for the shape that ' +
+                    'defeated imageUrlOf.');
     }
     $w('#' + HTML_ID).postMessage({ type: 'catalog', artworks });
   } catch (err) {
