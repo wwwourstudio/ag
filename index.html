@@ -844,10 +844,47 @@ class Component extends DCLogic {
      there is no "stale but better than nothing" branch left to take. */
   catalog() {
     const w = (window.AGWix && window.AGWix.catalog) || null;
-    if (w && w.length) return w;
     const s = (window.AGStore && window.AGStore.catalog) || null;
+    if (w && w.length) return this.withCollections(w, s);
     if (s && s.length) return s;
     return null;
+  }
+
+  /* The parent page wins on everything except collection names, which it does
+     not have.
+
+     Products carry category *ids*, never names, and turning them into names
+     needs the categories API — which in page code meant a backend file plus an
+     npm package, and a missing one stopped the page code building at all. That
+     lookup was removed for good reason; what did not follow was the other half.
+     AGWix then arrived with an empty `collections` on every piece, `["Works"]`
+     was substituted, and a store with five categories showed a menu of one.
+
+     AGStore reads the categories directly and already has the names, so take
+     them from there, matched on product id. Everything else — prices, variant
+     ids, the per-variant inventory counts only the site's own read can see —
+     still comes from AGWix. If the direct read has not landed yet the parent's
+     catalog passes through untouched and the names fill in on its next render.
+     @param {any[]} wix @param {any[] | null} store */
+  withCollections(wix, store) {
+    if (!store || !store.length) return wix;
+    /* Both sources substitute ["Works"] when they have no names, so a non-empty
+       `collections` is not proof of a real one — treat that placeholder as the
+       absence it stands for, or the merge skips every product it exists to fix. */
+    const placeholder = (c) => !c || !c.length || (c.length === 1 && c[0] === "Works");
+    const named = new Map();
+    for (const p of store) {
+      if (p && p.id && !placeholder(p.collections)) named.set(p.id, p.collections);
+    }
+    if (!named.size) return wix;
+    let changed = false;
+    const merged = wix.map((p) => {
+      const cols = named.get(p && p.id);
+      if (!cols || !placeholder(p && p.collections)) return p;
+      changed = true;
+      return Object.assign({}, p, { collections: cols });
+    });
+    return changed ? merged : wix;
   }
 
   /* True once either source has delivered. Add to cart still needs the parent
@@ -1152,19 +1189,60 @@ class Component extends DCLogic {
          this permanently and the wordmark would never form. */
       try {
         const el = this.loaderLogoEl;
-        const r = el.getBoundingClientRect();
-        if (!r.width || !el.naturalWidth) return;
-        const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+        /* Land the dust on the LIVE WORDMARK, not on the PNG's own box.
+
+           The PNG was previously stretched across the whole mark — img is
+           width:100%, height:auto — and sampled where it fell. But the PNG and
+           the live markup divide their height differently between the wordmark
+           and the ARTIST line below it, so matching the outer boxes did not
+           match the letters. At 1440px the PNG box measured 113.3 tall against
+           the text's 85.3 at the same origin: every glyph ~33% oversized and
+           sitting low, which is the doubled, merged GREEN in the loader.
+
+           So measure the wordmark inside the PNG — its opaque bounding box —
+           and map THAT onto the live wordmark's rect with a uniform scale. Both
+           are the same word, so the letters coincide by construction, whatever
+           padding the PNG carries and however the two lines are spaced. */
+        const target = (this.loaderWordEl || el).getBoundingClientRect();
+        const NW = el.naturalWidth, NH = el.naturalHeight;
+        if (!target.width || !NW) return;
+
         const off = document.createElement("canvas");
-        off.width = W; off.height = H;
+        off.width = NW; off.height = NH;
         const c = off.getContext("2d", { willReadFrequently: true });
-        c.drawImage(el, r.left * dpr, r.top * dpr, r.width * dpr, r.height * dpr);
-        const d = c.getImageData(0, 0, W, H).data;
-        const step = Math.max(2, Math.round(2.6 * dpr));
+        c.drawImage(el, 0, 0, NW, NH);
+        const d = c.getImageData(0, 0, NW, NH).data;
+        const opaque = (x, y) => d[(y * NW + x) * 4 + 3] > 120;
+
+        /* The first band of non-empty rows is the wordmark; the blank rows
+           under it separate it from ARTIST, which the live markup draws itself
+           and the dust no longer has to carry. */
+        let y0 = 0;
+        while (y0 < NH) { let any = 0; for (let x = 0; x < NW && !any; x++) if (opaque(x, y0)) any = 1; if (any) break; y0++; }
+        let y1 = y0;
+        while (y1 < NH) { let any = 0; for (let x = 0; x < NW && !any; x++) if (opaque(x, y1)) any = 1; if (!any) break; y1++; }
+        if (y1 <= y0) return;
+
+        let x0 = NW, x1 = -1;
+        for (let y = y0; y < y1; y++) {
+          for (let x = 0; x < NW; x++) {
+            if (!opaque(x, y)) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+          }
+        }
+        if (x1 < x0) return;
+
+        /* Uniform, driven by width: the same word at the same width is the same
+           word, and a separate vertical scale would only shear the glyphs. */
+        const scale = target.width / (x1 - x0 + 1);
+        const step = Math.max(1, Math.round(2.6 / scale));
         const pts = [];
-        for (let y = 0; y < H; y += step) {
-          for (let x = 0; x < W; x += step) {
-            if (d[(y * W + x) * 4 + 3] > 120) pts.push(x, y);
+        for (let y = y0; y < y1; y += step) {
+          for (let x = x0; x <= x1; x += step) {
+            if (!opaque(x, y)) continue;
+            pts.push(((x - x0) * scale + target.left) * dpr,
+                     ((y - y0) * scale + target.top) * dpr);
           }
         }
         if (pts.length > 8) { this.wordPts = pts; this.wordStart = performance.now(); }

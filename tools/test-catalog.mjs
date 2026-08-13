@@ -107,6 +107,38 @@ console.log("\nthe parent page wins when both answer");
      "the site's own read is preferred (it carries inventory counts)");
 }
 
+// ...on everything except collection names, which it does not have. The page
+// code has no categories lookup (it needed a backend file and an npm package,
+// and a missing one stopped the page building), so it sends the ["Works"]
+// placeholder. The direct read has the real names. Without this merge a store
+// with five categories showed a menu of one.
+console.log("\ncollection names survive the parent page not having any");
+{
+  const { ctx, c } = makeComponent();
+  ctx.window.AGStore = {
+    catalog: [artwork({ id: "p1", collections: ["Crowned Girls", "Night Studies"] })],
+    error: null, settled: true,
+  };
+  ctx.window.AGWix = { catalog: [artwork({ id: "p1", title: "Bridge One", collections: ["Works"] })] };
+  const w = c.workData()[0];
+  ok(w.title === "Bridge One", "the artwork is still the parent page's");
+  ok(w.collection === "Crowned Girls" && w.colKeys.length === 2,
+     "the names come from the direct read, matched on product id");
+
+  // A real name from the parent must not be overwritten by the direct read.
+  const b = makeComponent();
+  b.ctx.window.AGStore = { catalog: [artwork({ id: "p1", collections: ["From Store"] })], error: null, settled: true };
+  b.ctx.window.AGWix = { catalog: [artwork({ id: "p1", collections: ["From Parent"] })] };
+  ok(b.c.workData()[0].collection === "From Parent",
+     "a real name from the parent page is left alone");
+
+  // No direct read yet: the parent's catalog passes through rather than stalling.
+  const n = makeComponent();
+  n.ctx.window.AGWix = { catalog: [artwork({ id: "p1", title: "Alone", collections: ["Works"] })] };
+  ok(n.c.workData()[0].title === "Alone",
+     "the parent's catalog shows immediately when the direct read has not landed");
+}
+
 console.log("\npricing off whatever variants the store sent");
 {
   const { ctx, c } = makeComponent();
