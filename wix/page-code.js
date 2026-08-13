@@ -402,9 +402,10 @@ function toArtwork(product, info, inventory, names) {
      five fields and none of them media, as this did, and media comes back
      empty, which is how eleven products arrived image-less. So the rule is not
      "main needs the field", it is "once you project, you get only what you
-     project". Same reason PLAIN_DESCRIPTION had to be added beside it. */
+     project". Same reason PLAIN_DESCRIPTION had to be added beside it.
 
-     Read through imageUrl(), not `.image.url` directly. REST returns `image` as
+     Read through imageUrlOf(), not `.image.url` directly. REST returns `image`
+     as
      an object carrying a url, but the SDK has also handed back a bare string —
      and `('https://...').url` is undefined, which is silent. That produced
 
