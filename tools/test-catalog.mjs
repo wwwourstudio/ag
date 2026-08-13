@@ -225,5 +225,27 @@ console.log("\nthe loader's dust targets follow the wordmark rather than freezin
      "that rect is measured once per frame, not once per particle");
 }
 
+// A floating image gives no sign it can be opened, so the piece under the
+// cursor lifts and shows an expand cue. Both have to live inside the transform
+// the render loop rewrites every frame — a CSS :hover rule loses that race.
+console.log("\nthe sphere says its artwork is clickable");
+{
+  ok(/data-cue="1"/.test(html), "each artwork carries a click cue");
+  ok(/this\.hoverNode = this\.drag \? null : over/.test(html),
+     "the cue follows the pointer, and is suppressed mid-drag");
+  ok(/const hot = wS > 0\.5 && this\.hoverNode === node/.test(html),
+     "it is a sphere-only affordance, off in the wall view");
+  ok(/scale\(" \+ \(scale \* lift\)/.test(html),
+     "the lift is folded into the per-frame transform, not left to CSS");
+  ok(/node\.__hot !== hot/.test(html),
+     "cue styles are written on change, not every frame for every artwork");
+  // The cue sits between the image and the sheen: the loop reads
+  // firstElementChild as the image and lastElementChild as the glass.
+  const tile = html.match(/<div data-work="1"[\s\S]*?<\/div>/)[0];
+  const iImg = tile.indexOf("<img"), iCue = tile.indexOf("data-cue"), iGlass = tile.indexOf("data-glass");
+  ok(iImg < iCue && iCue < iGlass,
+     "the cue sits between the image and the sheen, so neither is displaced");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
