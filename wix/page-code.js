@@ -153,6 +153,39 @@ function richText(doc) {
   return out.join('').trim();
 }
 
+/* The product blurb the lightbox shows under the title.
+
+   `plainDescription` is NOT returned by the DESCRIPTION field — verified
+   against this store:
+
+     fields=DESCRIPTION         description: object,  plainDescription: absent
+     fields=PLAIN_DESCRIPTION   plainDescription: "<p>Deep indigo ground…</p>"
+
+   The projection asked for DESCRIPTION and this read plainDescription, so every
+   blurb was the empty string and the lightbox showed none of the text typed
+   into Wix. PLAIN_DESCRIPTION is in both projections now.
+
+   It still arrives wrapped in HTML, so strip the tags — and fall back to
+   flattening the rich `description` document, which the same projection also
+   returns, so a store that has one but not the other still reads.
+   @param {any} product */
+function descriptionOf(product) {
+  const plain = product.plainDescription || '';
+  const stripped = plain
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>\s*<p[^>]*>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped || richText(product.description);
+}
+
 /* The SDK names ids `_id`, but nested references (category refs, for one) come
    back as `id`. Reading them through an `any` helper keeps the editor's type
    checker quiet either way.
@@ -385,7 +418,7 @@ function toArtwork(product, info, inventory, names) {
     year: sectionOf(product, info, 'year'),
     edition: parseInt(sectionOf(product, info, 'edition'), 10) || 0,
     collections: collections.length ? collections : ['Works'],
-    description: product.plainDescription || '',
+    description: descriptionOf(product),
     price: origPrice,
     priceText: money(origPrice),
     inStock: origInStock,
@@ -484,6 +517,7 @@ async function buildCatalogDirect() {
         .getProduct(idOf(p), {
           fields: [
             'MEDIA_ITEMS_INFO',
+            'PLAIN_DESCRIPTION',
             'VARIANT_OPTION_CHOICE_NAMES',
             'DESCRIPTION',
             'URL',
