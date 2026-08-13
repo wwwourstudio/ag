@@ -81,7 +81,10 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
 
   let inventoryItems = [];
   try {
-    const res = await searchInventoryItems({ cursorPaging: { limit: 100 } });
+    /* 1000 is this method's documented maximum, and 100 was already only
+       comfortably above the store's current 66 rows. A silent truncation here
+       costs every "N left" label with no error to notice. */
+    const res = await searchInventoryItems({ cursorPaging: { limit: 1000 } });
     inventoryItems = res.inventoryItems || res.items || [];
   } catch (err) {
     console.error('[AG/backend] could not read inventory:', err);
