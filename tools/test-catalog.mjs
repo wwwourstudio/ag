@@ -142,5 +142,38 @@ console.log("\nthe direct store read is shaped the way the API expects");
      "products stay fatal — there is no gallery without them");
 }
 
+// The Wix page code hands the gallery its images, and it extracts them from a
+// media entry whose shape varies by source: REST returns `image` as an object
+// with a url, the SDK has returned it as a bare string, and Wix's internal
+// `wix:image://` form turns up too. Reading `.url` off a string is undefined
+// rather than an error, so getting this wrong drops every artwork in silence —
+// which it did: "11 loaded, 0 with images" against a store whose products all
+// had good images. Pin every shape.
+console.log("\nan image URL is found whatever shape the media arrives in");
+{
+  const src = fs.readFileSync("/home/user/ag/wix/page-code.js", "utf8");
+  const fn = src.match(/function imageUrlOf\(entry\) \{[\s\S]*?\n\}/);
+  ok(!!fn, "page-code.js defines imageUrlOf");
+  const imageUrlOf = new Function("entry",
+    fn[0].replace(/^function imageUrlOf\(entry\) \{/, "").replace(/\}$/, ""));
+  const CDN = "https://static.wixstatic.com/media/";
+
+  ok(imageUrlOf({ mediaType: "IMAGE", image: { id: "x", url: CDN + "a.png" } }) === CDN + "a.png",
+     "REST object — { image: { url } }, the shape this store returns");
+  ok(imageUrlOf({ image: CDN + "b.png" }) === CDN + "b.png",
+     "bare https string — .url on a string is undefined, the silent drop");
+  ok(imageUrlOf({ image: "wix:image://v1/ee1cab_9f.png/file.png#originWidth=1288" }) === CDN + "ee1cab_9f.png",
+     "wix:image:// internal form resolves to the CDN URL");
+  ok(imageUrlOf({ url: CDN + "c.png" }) === CDN + "c.png",
+     "entry that is itself the image object");
+  ok(imageUrlOf(undefined) === "" && imageUrlOf({}) === "",
+     "nothing usable returns empty, never undefined");
+
+  // Both reads must ask for media, or the store returns products with none.
+  const backend = fs.readFileSync("/home/user/ag/wix/backend/artworkCatalog.web.js", "utf8");
+  ok(/MEDIA_ITEMS_INFO/.test(src), "the direct read asks for MEDIA_ITEMS_INFO");
+  ok(/MEDIA_ITEMS_INFO/.test(backend), "the backend read asks for MEDIA_ITEMS_INFO");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
