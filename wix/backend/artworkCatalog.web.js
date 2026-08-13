@@ -98,6 +98,7 @@ export const readCatalogSources = webMethod(Permissions.Anyone, async () => {
       items.map((p) =>
         getProduct(idOf(p), {
           fields: [
+            'MEDIA_ITEMS_INFO',
             'VARIANT_OPTION_CHOICE_NAMES',
             'DESCRIPTION',
             'URL',
