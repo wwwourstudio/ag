@@ -626,6 +626,14 @@
     <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
       <div data-work="1" style="position: absolute; left: 0; top: 0; width: 300px; cursor: pointer; will-change: transform, opacity; transform-origin: 50% 50%; -webkit-tap-highlight-color: transparent;">
         <img data-src="{{ w.src }}" alt="Artwork by Annie Green" style="display: block; width: 100%;">
+        <!-- Click cue. Sits BETWEEN the image and the sheen on purpose: the
+             render loop reads firstElementChild as the image and
+             lastElementChild as the glass, so appending it at the end would
+             silently make the sheen logic operate on this instead. Shown only
+             while the sphere is up and only on the piece under the cursor. -->
+        <span data-cue="1" style="position: absolute; left: 50%; top: 50%; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(20,23,26,.52); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 6px 20px rgba(20,23,26,.28), inset 0 0 0 1px rgba(255,255,255,.28); color: #fbfaf8; opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"></path><path d="M10 20H4v-6"></path><path d="M20 4l-7 7"></path><path d="M4 20l7-7"></path></svg>
+        </span>
         <span data-glass="1" style="position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(112deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 44%, rgba(255,255,255,0) 64%, rgba(255,255,255,.16) 80%, rgba(255,255,255,.34) 100%);"></span>
       </div>
     </sc-for>
@@ -1124,6 +1132,12 @@ class Component extends DCLogic {
     this.onDown = e => { this.drag = { x: e.clientX, y: e.clientY, moved: 0 }; if (this.stageEl) this.stageEl.style.cursor = "grabbing"; };
     this.onMove = e => {
       this.mx = e.clientX; this.my = e.clientY;
+      /* Which piece is under the cursor, for the click cue. Cleared while
+         dragging: mid-spin the pointer sweeps across everything, and a cue
+         flickering from one artwork to the next reads as noise rather than as
+         "this one opens". */
+      const over = e.target && e.target.closest ? e.target.closest("[data-work]") : null;
+      this.hoverNode = this.drag ? null : over;
       if (!this.drag || this.state.lb >= 0) return;
       const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
       this.drag.x = e.clientX; this.drag.y = e.clientY;
@@ -1134,6 +1148,7 @@ class Component extends DCLogic {
     this.onUp = () => { if (this.stageEl) this.stageEl.style.cursor = "grab"; setTimeout(() => { this.drag = null; }, 0); };
     this.onLeave = () => {
       this.mx = null; this.my = null;
+      this.hoverNode = null;
     };
     window.addEventListener("pointerdown", this.onDown);
     window.addEventListener("pointermove", this.onMove);
@@ -1820,9 +1835,15 @@ class Component extends DCLogic {
       }
     }
 
-    const R = narrow ? mn * 0.92 : mn * 1.12;
-    const fitS = narrow ? mn / 620 : mn / 840;
-    const f = narrow ? 1500 : 1750;
+    /* Desktop used to frame the sphere so tightly that only 5 or 6 of eleven
+       pieces were on screen at once and a single artwork could span 719px of a
+       1440px window — you spun it and still saw almost nothing. Pulling the
+       radius in, shrinking the cards and pushing the camera back puts all
+       eleven in frame at 143-203px each, measured. Mobile keeps its own numbers:
+       the screen is small enough that fewer, larger cards is the right call. */
+    const R = narrow ? mn * 0.92 : mn * 0.66;
+    const fitS = narrow ? mn / 620 : mn / 1700;
+    const f = narrow ? 1500 : 2750;
 
     /* A vertical drag tumbles the sphere on X, deliberately unclamped — the
        old ±0.9rad limit meant it only tilted, so pieces near the poles never
@@ -1985,13 +2006,34 @@ class Component extends DCLogic {
         py += dym * 5 * kk;
       }
 
+      /* Nothing on a floating image says "click me", so the piece under the
+         cursor lifts slightly and shows an expand cue. The lift has to be
+         folded into the transform the loop writes every frame — a CSS :hover
+         rule would be overwritten on the very next one. */
+      const hot = wS > 0.5 && this.hoverNode === node && this.state.lb < 0;
+      const lift = hot ? 1.07 : 1;
+
       node.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
         + " perspective(1600px) rotateY(" + tiltY.toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
-        + " scale(" + scale.toFixed(3) + ")";
+        + " scale(" + (scale * lift).toFixed(3) + ")";
+
+      /* Written only on change: this runs for every artwork every frame. */
+      if (node.__hot !== hot) {
+        node.__hot = hot;
+        const cue = node.children[1];
+        if (cue && cue.dataset && cue.dataset.cue) {
+          cue.style.opacity = hot ? "1" : "0";
+          cue.style.transform = hot ? "scale(1)" : "scale(.8)";
+        }
+      }
       const opS = 0.42 + 0.58 * depth;
       const opG = 1 - off * 0.3;
-      node.style.opacity = ((opS * wS + opG * m) * ei).toFixed(3);
-      node.style.zIndex = String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
+      /* A hovered piece comes fully forward — depth-dimming it while it is the
+         one being pointed at fights the affordance — and rises above its
+         neighbours so the cue is not covered by a card in front. */
+      const op = (opS * wS + opG * m) * ei;
+      node.style.opacity = (hot ? Math.max(op, 0.96) : op).toFixed(3);
+      node.style.zIndex = hot ? "1999" : String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
       node.style.pointerEvents = (m > 0.5 || depth > 0.52) ? "auto" : "none";
 
       const glass = node.lastElementChild;
