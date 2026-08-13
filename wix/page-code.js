@@ -39,9 +39,21 @@
  */
 
 import { productsV3, infoSectionsV3, inventoryItemsV3 } from '@wix/stores';
-import wixLocation from 'wix-location';
-import wixEcomFrontend from 'wix-ecom-frontend';
-import wixWindow from 'wix-window';
+/* --- SITE MODULES -------------------------------------------------------
+   This is a Wix Studio site, so the site APIs are the namespaced `@wix/site-*`
+   packages. The classic Velo specifiers do not resolve in this editor:
+
+     wix-location       -> @wix/site-location
+     wix-window         -> @wix/site-window     (the editor suggests this one
+                                                 by name in the error)
+     wix-ecom-frontend  -> resolved lazily below
+
+   This matters more than a rename. An unresolvable specifier fails the WHOLE
+   page code — no catalog, no cart, no message handler — which is how a cart
+   convenience module ends up blanking the gallery. Only modules the artwork
+   genuinely depends on are imported statically. */
+import { location as siteLocation } from '@wix/site-location';
+import { window as siteWindow } from '@wix/site-window';
 import { currentCartV2 } from '@wix/ecom';
 
 /* --- BACKEND CATALOG ---------------------------------------------------
@@ -62,16 +74,26 @@ import { readCatalogSources } from 'backend/artworkCatalog.web';
 
 /* --- COLLECTION NAMES ---------------------------------------------------
    The Collections menu follows the store: rename a collection in Wix and the
-   menu renames, add or delete one and it appears or goes. There is no table of
-   names in this file any more — products carry category *ids*, and this is what
-   turns them into names.
+   menu renames, add or delete one and it appears or goes. Products carry
+   category *ids*, never names, so something has to turn ids into names.
 
-   REQUIRES: `@wix/categories` installed (Packages & Apps -> npm) AND
-   backend/artworkCategories.web.js created. Create both before pasting this
-   file. If the read fails, every piece lands in "Works" and the gallery's own
-   direct read of the store supplies the real names instead — see AGStore in
-   index.html. */
-import { readCategoryNames } from 'backend/artworkCategories.web';
+   THAT LOOKUP NO LONGER HAPPENS HERE, deliberately.
+
+   It used to be `import { readCategoryNames } from 'backend/artworkCategories.web'`,
+   which required TWO manual steps in the editor — create that backend file, and
+   install the `@wix/categories` npm package. Miss either and the editor reports
+
+     Cannot find module 'backend/artworkCategories.web' in 'public/pages/...'
+
+   and the page code does not build AT ALL: no catalog goes to the gallery, no
+   addToCart handler is registered. A menu label was able to take down the
+   artwork and the checkout with it.
+
+   The gallery reads the categories itself now, straight from the store, so the
+   names arrive without this file existing — see AGStore in index.html. Names
+   resolve empty here and toArtwork falls back to "Works"; the gallery then
+   overlays the real ones. Two setup steps removed, and the failure they caused
+   removed with them. */
 
 const HTML_ID = 'html1';
 const STORES_APP_ID = '215238eb-22a5-4c36-9e7b-e7c08025e04e';
@@ -357,7 +379,7 @@ async function buildCatalogViaBackend() {
     };
   }
 
-  const names = await readCategoryNames();
+  const names = {};   /* the gallery resolves collection names itself */
 
   const products = src.products || [];
   const artworks = products
@@ -375,7 +397,7 @@ async function buildCatalogViaBackend() {
 async function buildCatalogDirect() {
   const info = await loadInfoSections();
   const inventory = await loadInventory();
-  const names = await readCategoryNames();
+  const names = {};   /* the gallery resolves collection names itself */
 
   /* queryProducts does NOT return variant data, so each product is fetched
      individually for its variant ids and per-finish prices. Fine for a
@@ -483,9 +505,47 @@ function inventoryRefusal(err) {
 /* The SDK writes straight to the cart, which leaves the page's cart UI showing
    stale data — only refreshCart() makes the cart icon and side cart re-read it.
    Refresh before opening the panel, so it opens already showing the artwork. */
+/* The cart-UI module under two names: `@wix/site-ecom` on Wix Studio and
+   `wix-ecom-frontend` on classic Velo. Resolved at call time rather than
+   imported, because this module drives a *flourish* — refreshing the cart icon
+   and sliding the panel out — and a static import of the wrong one of those two
+   names fails the entire page code. The purchase completes without it.
+
+   The literal specifiers are deliberate: a variable would defeat the bundler.
+   Whichever name this editor knows resolves; the other throws and is swallowed. */
+let ecomModule;
+async function ecom() {
+  if (ecomModule !== undefined) return ecomModule;
+  try {
+    ecomModule = await import('@wix/site-ecom');
+  } catch (studioErr) {
+    try {
+      ecomModule = await import('wix-ecom-frontend');
+    } catch (veloErr) {
+      console.warn('[AG] no cart-UI module (@wix/site-ecom or wix-ecom-frontend); ' +
+                   'adds still work, the panel just will not open itself:', veloErr);
+      ecomModule = null;
+    }
+  }
+  return ecomModule;
+}
+
+/* Both names have been used for these two calls across SDK versions, so try
+   each. Missing entirely is survivable — see ecom() above. */
+/** @param {any} mod @param {string[]} names */
+const callable = (mod, names) => {
+  if (!mod) return null;
+  for (const n of names) {
+    const fn = mod[n] || (mod.cart && mod.cart[n]);
+    if (typeof fn === 'function') return fn.bind(mod.cart || mod);
+  }
+  return null;
+};
+
 async function refreshCartUI() {
   try {
-    await wixEcomFrontend.refreshCart();
+    const fn = callable(await ecom(), ['refreshCart']);
+    if (fn) await fn();
   } catch (err) {
     console.error('[AG] could not refresh the cart UI:', err);
   }
@@ -546,7 +606,7 @@ function openLightboxNamed(i) {
 
   let opening;
   try {
-    opening = wixWindow.openLightbox(names[i]);
+    opening = siteWindow.openLightbox(names[i]);
   } catch (err) {
     openLightboxNamed(i + 1);
     return;
@@ -556,9 +616,10 @@ function openLightboxNamed(i) {
   }
 }
 
-function openSideCart() {
+async function openSideCart() {
   try {
-    wixEcomFrontend.openSideCart();
+    const fn = callable(await ecom(), ['openSideCart', 'showCart', 'openCart']);
+    if (fn) fn();
   } catch (err) {
     /* Sites still on the old Mini Cart have no side cart to open (and it
        throws outright on mobile there). The item is in the cart either way,
@@ -606,7 +667,7 @@ $w.onReady(function () {
     }
 
     if (msg.type === 'openProduct') {
-      wixLocation.to(msg.url || '/product-page/' + msg.slug);
+      siteLocation.to(msg.url || '/product-page/' + msg.slug);
       return;
     }
 

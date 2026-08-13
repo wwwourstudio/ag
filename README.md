@@ -77,13 +77,30 @@ were recovered from the running production deployment.
 `wix/page-code.js` goes in the **Gallery page's** code panel — the editor tab
 named after the page. Nowhere else.
 
-It imports two backend files, so create both **before** pasting it (an import of
-a file that isn't there fails the whole page code, not just the catalog):
+It imports **one** backend file, so create it **before** pasting the page code —
+an import of a file that isn't there fails the whole page code, not just the
+catalog:
 
 - `backend/artworkCatalog.web.js` — reads products, variants, info sections and
   inventory with elevated permissions.
-- `backend/artworkCategories.web.js` — turns category ids into collection names.
-  Needs `@wix/categories` installed first (Packages & Apps → npm).
+
+`backend/artworkCategories.web.js` is **no longer imported** and no longer needs
+creating; `@wix/categories` no longer needs installing. Both were required only
+for collection names, and a missing one produced
+
+```
+[/pages/Gallery.c1dmp.js]: Cannot find module 'backend/artworkCategories.web'
+```
+
+which stopped the page code building at all — no catalog, no add-to-cart. The
+gallery reads the categories itself now (`AGStore` in `index.html`), so the names
+survive without it. The file is kept in `wix/backend/` for reference only.
+
+This is a **Wix Studio** site, so the site APIs are the namespaced packages —
+`@wix/site-location`, `@wix/site-window`. The classic `wix-location` /
+`wix-window` / `wix-ecom-frontend` specifiers do not resolve here and fail the
+build the same way. The cart-UI module is resolved at call time under both names,
+so it cannot take the page down.
 
 - Not `data.js`, not a Public file: `$w` and `wix-location` exist only in page
   code, and using them elsewhere fails with
