@@ -309,16 +309,30 @@ function toArtwork(product, info, inventory, names) {
 
   const catRefs =
     (product.directCategoriesInfo && product.directCategoriesInfo.categories) || [];
+  /* An unnamed id is the normal case now, not a fault: `names` is deliberately
+     empty here since the categories lookup moved into the gallery, which reads
+     the store directly. This used to warn once per product per category and
+     buried the two lines that mattered under ~150 identical ones. */
   const collections = catRefs
     .map(idOf)
-    .map((id) => {
-      const name = names && names[id];
-      if (!name) console.warn('[AG] no name for category', id, '- is @wix/categories installed?');
-      return name;
-    })
+    .map((id) => names && names[id])
     .filter((name) => name && name.toLowerCase() !== ALL_PRODUCTS);
 
-  const media = product.media && product.media.main && product.media.main.image;
+  /* `media.main` is read-only and derived from the first entry of
+     `media.itemsInfo.items` — and it only arrives when MEDIA_ITEMS_INFO is in
+     the fields projection. Without it every product came back with an empty
+     media object, toArtwork produced no image, the `.filter((a) => a.image)`
+     below dropped all eleven, and the console read
+
+       [AG] catalog (backend): 11 loaded, 0 with images
+       [AG] every product was dropped for having no main image
+
+     Read the items array as well as main, so a product whose main has not been
+     derived still shows its first image rather than vanishing. */
+  const items = (product.media && product.media.itemsInfo &&
+                 product.media.itemsInfo.items) || [];
+  const media = (product.media && product.media.main && product.media.main.image) ||
+                (items.length && items[0] && items[0].image) || null;
 
   return {
     id: idOf(product),
@@ -430,6 +444,7 @@ async function buildCatalogDirect() {
       productsV3
         .getProduct(idOf(p), {
           fields: [
+            'MEDIA_ITEMS_INFO',
             'VARIANT_OPTION_CHOICE_NAMES',
             'DESCRIPTION',
             'URL',
