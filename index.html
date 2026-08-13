@@ -333,6 +333,23 @@
         .then(function (tok) {
           var token = tok.access_token;
           if (!token) throw new Error("no access_token in the token response");
+          /* Products and variants ARE the artwork: if either fails there is
+             nothing to hang, so let them reject and be reported. Info sections
+             and category names are labels laid over that artwork — losing them
+             costs a caption or a menu entry, never the gallery. They resolve
+             empty instead, because a Promise.all that treats a label lookup as
+             fatal blanks the whole wall over a menu. That is exactly what the
+             category call did: it was posted to categories/query without a
+             treeReference, came back 400, and took the entire live read with
+             it. Categories are Catalog V3, and every request in that API
+             requires the tree it belongs to. */
+          var soft = function (label, p) {
+            return p.catch(function (e) {
+              console.warn("[gallery] " + label + " unavailable, continuing without it:",
+                           (e && e.message) || e);
+              return {};
+            });
+          };
           return Promise.all([
             post("/stores/v3/products/search", token, {
               search: { cursorPaging: { limit: 100 } },
@@ -341,12 +358,13 @@
             post("/stores/v3/products/query-variants", token, {
               query: { cursorPaging: { limit: 1000 } }
             }),
-            post("/stores/v3/info-sections/query", token, {
+            soft("info sections", post("/stores/v3/info-sections/query", token, {
               query: { cursorPaging: { limit: 100 } }
-            }),
-            post("/categories/v1/categories/query", token, {
-              query: { cursorPaging: { limit: 100 } }
-            })
+            })),
+            soft("collection names", post("/categories/v1/categories/search", token, {
+              search: { cursorPaging: { limit: 100 } },
+              treeReference: { appNamespace: "@wix/stores" }
+            }))
           ]);
         })
         .then(function (res) {
@@ -377,7 +395,8 @@
             .filter(function (a) { return a.image; });
 
           console.log("[gallery] read the store directly:", products.length, "products,",
-                      artworks.length, "with images");
+                      artworks.length, "with images,",
+                      Object.keys(names).length, "collections");
           if (products.length && !artworks.length) {
             console.error("[gallery] every product was dropped for having no main image.");
           }
