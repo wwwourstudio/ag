@@ -446,6 +446,19 @@
     @keyframes meterIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
     @keyframes holoSpin { to { transform: rotate(360deg); } }
     @keyframes holoHue { to { filter: hue-rotate(360deg); } }
+    /* The lit edge for a hovered artwork. It is a box-shadow ON THE IMAGE, not
+       a ring element beside it: a separate absolutely-positioned box does not
+       track a sibling that is being drawn through perspective() and rotateY/
+       rotateX, and it sat visibly askew of the piece it framed. A shadow is
+       part of the image's own box, so it cannot come apart from it. */
+    @keyframes holoEdge {
+      0%   { box-shadow: 0 0 0 4px #ffd6e8, 0 0 26px rgba(255,214,232,.66); }
+      20%  { box-shadow: 0 0 0 4px #d9f2ff, 0 0 26px rgba(217,242,255,.66); }
+      40%  { box-shadow: 0 0 0 4px #d8ffe4, 0 0 26px rgba(216,255,228,.66); }
+      60%  { box-shadow: 0 0 0 4px #fff6cf, 0 0 26px rgba(255,246,207,.66); }
+      80%  { box-shadow: 0 0 0 4px #ffd9f4, 0 0 26px rgba(255,217,244,.66); }
+      100% { box-shadow: 0 0 0 4px #ffd6e8, 0 0 26px rgba(255,214,232,.66); }
+    }
     @keyframes holoSlide { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
     @keyframes holoSheen { 0% { background-position: 160% 0; } 55% { background-position: -60% 0; } 100% { background-position: -60% 0; } }
     @keyframes panelIn { from { transform: translateX(102%); } to { transform: translateX(0); } }
@@ -616,11 +629,11 @@
 </helmet>
 <div style="position: fixed; inset: 0; overflow: hidden; background: #f5f3ef; color: #14171a; font-family: 'Jost', system-ui, sans-serif; touch-action: none;">
 
-  <div ref="{{ wash }}" style="position: absolute; inset: -20%; z-index: 0; pointer-events: none; filter: blur(72px) saturate(1.35);">
-    <div ref="{{ blobA }}" style="position: absolute; left: 8%; top: 12%; width: 46%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(46,190,110,.62) 0%, rgba(46,190,110,.22) 46%, rgba(46,190,110,0) 74%); will-change: transform;"></div>
-    <div ref="{{ blobB }}" style="position: absolute; right: 6%; top: 8%; width: 44%; height: 48%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(232,64,150,.58) 0%, rgba(232,64,150,.2) 46%, rgba(232,64,150,0) 74%); will-change: transform;"></div>
-    <div ref="{{ blobC }}" style="position: absolute; right: 16%; bottom: 6%; width: 50%; height: 52%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(96,150,255,.5) 0%, rgba(96,150,255,.18) 48%, rgba(96,150,255,0) 76%); will-change: transform;"></div>
-    <div ref="{{ blobD }}" style="position: absolute; left: 12%; bottom: 10%; width: 42%; height: 46%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,196,78,.46) 0%, rgba(255,196,78,.16) 48%, rgba(255,196,78,0) 76%); will-change: transform;"></div>
+  <div ref="{{ wash }}" style="position: absolute; inset: -20%; z-index: 0; pointer-events: none; filter: blur(78px) saturate(1.02);">
+    <div ref="{{ blobA }}" style="position: absolute; left: 8%; top: 12%; width: 46%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.9) 0%, rgba(198,246,220,.42) 36%, rgba(198,246,220,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobB }}" style="position: absolute; right: 6%; top: 8%; width: 44%; height: 48%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.88) 0%, rgba(255,210,233,.4) 36%, rgba(255,210,233,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobC }}" style="position: absolute; right: 16%; bottom: 6%; width: 50%; height: 52%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.84) 0%, rgba(208,231,255,.38) 38%, rgba(208,231,255,0) 76%); will-change: transform;"></div>
+    <div ref="{{ blobD }}" style="position: absolute; left: 12%; bottom: 10%; width: 42%; height: 46%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.82) 0%, rgba(232,236,244,.34) 38%, rgba(232,236,244,0) 76%); will-change: transform;"></div>
   </div>
   <canvas ref="{{ sphereDust }}" style="position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
   <canvas ref="{{ sphereDustFront }}" style="position: absolute; inset: 0; z-index: 2200; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
@@ -652,22 +665,18 @@
              image and lastElementChild as the glass, so appending at the end
              would silently hand the sheen logic the wrong element.
 
-             The ring is the artwork's border lit with the same holographic
-             conic gradient the toggle and the buy buttons use, turning on
-             holoSpin.
-
-             It is a MASKED FRAME, not a panel behind the image: the mask pair
-             punches out the content box and leaves only the 4px edge, so the
-             gradient draws as a stroke on top of the artwork. Sitting it behind
-             the image instead — the obvious approach, and the one I tried first
-             — showed only whatever peeked past the edges, and against a wall of
-             pastel neighbours that read as grey haze rather than a lit border.
+             The border is the holoEdge keyframe applied to the IMAGE itself,
+             cycling the same palette the toggle and buy buttons use. It began
+             as a separate masked ring element; that could not be kept aligned,
+             because a filter or an absolutely-positioned box does not survive
+             the perspective() and rotateY/rotateX the tile is drawn with, and
+             the frame ended up askew of the piece. A box-shadow belongs to the
+             image's own box and cannot come apart from it.
 
              The + is the click cue: small, in the corner, carrying the same
              gradient with holoHue cycling through it. It replaced a large
              expand glyph in the middle of the piece, which covered the artwork
              it was inviting you to look at. -->
-        <span data-ring="1" style="position: absolute; inset: -5px; border-radius: 3px; padding: 4px; filter: saturate(1.9); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoSpin 6s linear infinite; opacity: 0; pointer-events: none; transition: opacity .28s ease;"></span>
         <span data-cue="1" style="position: absolute; right: -10px; top: -10px; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoHue 9s linear infinite; box-shadow: 0 4px 14px rgba(20,23,26,.3), inset 0 0 0 1px rgba(255,255,255,.72); color: #14171a; opacity: 0; transform: scale(.7); pointer-events: none; transition: opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
         </span>
@@ -878,8 +887,12 @@
       </div>
     </div>
     <div ref="{{ meter }}" style="position: absolute; left: 50%; bottom: clamp(56px, 12vh, 110px); width: min(560px, 78vw); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; opacity: 0; transition: opacity .6s ease;">
-      <div style="flex: 1; height: 1px; background: rgba(255,255,255,.13);">
-        <div ref="{{ bar }}" style="width: 0%; height: 100%; background: #f4f2ee;"></div>
+      <!-- 2px, not 1: the holographic gradient needs something to read in.
+           The fill carries the same conic the toggle and buy buttons use, with
+           holoHue cycling it, so the loader introduces the palette the rest of
+           the site is built on instead of a plain white rule. -->
+      <div style="flex: 1; height: 2px; background: rgba(255,255,255,.13); border-radius: 2px; overflow: hidden;">
+        <div ref="{{ bar }}" style="width: 0%; height: 100%; border-radius: 2px; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); background-size: 220% 220%; animation: holoHue 6s linear infinite; box-shadow: 0 0 12px rgba(226,240,255,.55);"></div>
       </div>
       <div ref="{{ pct }}" style="font-size: 10px; letter-spacing: .24em; color: rgba(244,242,238,.5); min-width: 44px; text-align: right;">000</div>
     </div>
@@ -1405,11 +1418,19 @@ class Component extends DCLogic {
     const my = this.my == null ? h * 0.5 : this.my;
     const nx = (mx / w - 0.5) * 2, ny = (my / h - 0.5) * 2;
     if (!this.blobs) {
+      /* `lag` is how much of the distance to the target each blob closes per
+         frame, and at 0.006-0.020 they crawled: they were following the pointer
+         the whole time, just far too slowly to read as following anything. The
+         lift here is what turns drift into response. Each still moves at its
+         own rate — the nearest quickest, the furthest slowest — so the field
+         keeps its depth instead of sliding as one sheet.
+
+         `pull` is how far the pointer can drag them, also raised. */
       this.blobs = [
-        { el: "blobAEl", lag: 0.020, pull: 190, sx: 1.00, sy: 0.62, ph: 0.0, sp: 0.17, amp: 62 },
-        { el: "blobBEl", lag: 0.014, pull: 230, sx: 0.74, sy: 1.10, ph: 2.1, sp: 0.13, amp: 78 },
-        { el: "blobCEl", lag: 0.009, pull: 265, sx: 1.20, sy: 0.85, ph: 4.0, sp: 0.10, amp: 92 },
-        { el: "blobDEl", lag: 0.006, pull: 300, sx: 0.88, sy: 1.24, ph: 5.4, sp: 0.08, amp: 108 }
+        { el: "blobAEl", lag: 0.115, pull: 300, sx: 1.00, sy: 0.62, ph: 0.0, sp: 0.17, amp: 62 },
+        { el: "blobBEl", lag: 0.092, pull: 350, sx: 0.74, sy: 1.10, ph: 2.1, sp: 0.13, amp: 78 },
+        { el: "blobCEl", lag: 0.070, pull: 400, sx: 1.20, sy: 0.85, ph: 4.0, sp: 0.10, amp: 92 },
+        { el: "blobDEl", lag: 0.052, pull: 450, sx: 0.88, sy: 1.24, ph: 5.4, sp: 0.08, amp: 108 }
       ];
       for (const b of this.blobs) { b.x = 0; b.y = 0; }
     }
@@ -2183,9 +2204,10 @@ class Component extends DCLogic {
       /* Written only on change: this runs for every artwork every frame. */
       if (node.__hot !== hot) {
         node.__hot = hot;
-        const ring = node.children[1], cue = node.children[2];
-        if (ring && ring.dataset && ring.dataset.ring) {
-          ring.style.opacity = hot ? "1" : "0";
+        const art = node.children[0], cue = node.children[1];
+        if (art && art.tagName === "IMG") {
+          art.style.animation = hot ? "holoEdge 3.6s linear infinite" : "";
+          if (!hot) art.style.boxShadow = "";
         }
         if (cue && cue.dataset && cue.dataset.cue) {
           cue.style.opacity = hot ? "1" : "0";
