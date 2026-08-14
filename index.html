@@ -446,6 +446,30 @@
     @keyframes meterIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
     @keyframes holoSpin { to { transform: rotate(360deg); } }
     @keyframes holoHue { to { filter: hue-rotate(360deg); } }
+    /* The lit edge for a hovered artwork. It is a box-shadow ON THE IMAGE, not
+       a ring element beside it: a separate absolutely-positioned box does not
+       track a sibling that is being drawn through perspective() and rotateY/
+       rotateX, and it sat visibly askew of the piece it framed. A shadow is
+       part of the image's own box, so it cannot come apart from it. */
+    /* The wall's mat, lit. Same palette as holoEdge but applied to the frame's
+       white border rather than a shadow, because on the wall the artwork is
+       already matted and that mat is the natural thing to light. */
+    @keyframes holoMat {
+      0%   { border-color: #ffd6e8; }
+      20%  { border-color: #d9f2ff; }
+      40%  { border-color: #d8ffe4; }
+      60%  { border-color: #fff6cf; }
+      80%  { border-color: #ffd9f4; }
+      100% { border-color: #ffd6e8; }
+    }
+    @keyframes holoEdge {
+      0%   { box-shadow: 0 0 0 4px #ffd6e8, 0 0 26px rgba(255,214,232,.66); }
+      20%  { box-shadow: 0 0 0 4px #d9f2ff, 0 0 26px rgba(217,242,255,.66); }
+      40%  { box-shadow: 0 0 0 4px #d8ffe4, 0 0 26px rgba(216,255,228,.66); }
+      60%  { box-shadow: 0 0 0 4px #fff6cf, 0 0 26px rgba(255,246,207,.66); }
+      80%  { box-shadow: 0 0 0 4px #ffd9f4, 0 0 26px rgba(255,217,244,.66); }
+      100% { box-shadow: 0 0 0 4px #ffd6e8, 0 0 26px rgba(255,214,232,.66); }
+    }
     @keyframes holoSlide { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
     @keyframes holoSheen { 0% { background-position: 160% 0; } 55% { background-position: -60% 0; } 100% { background-position: -60% 0; } }
     @keyframes panelIn { from { transform: translateX(102%); } to { transform: translateX(0); } }
@@ -516,6 +540,11 @@
        for the artwork; below roughly 820px the artwork is squeezed to
        nothing and the detail column overflows. Stack instead: artwork on
        top at a size worth looking at, details scrolling underneath. */
+    /* On a phone the right edge is where the thumb sits and where the system
+       back gesture lives, so the close moves to the left. */
+    @media (max-width: 620px) {
+      [data-lb-close] { right: auto !important; left: clamp(12px, 3vw, 20px) !important; }
+    }
     @media (max-width: 820px) {
       /* The whole lightbox scrolls as one page — artwork, details and both
          buy cards in a single run. The shell sets touch-action: none so a
@@ -616,19 +645,19 @@
 </helmet>
 <div style="position: fixed; inset: 0; overflow: hidden; background: #f5f3ef; color: #14171a; font-family: 'Jost', system-ui, sans-serif; touch-action: none;">
 
-  <div ref="{{ wash }}" style="position: absolute; inset: -20%; z-index: 0; pointer-events: none; filter: blur(72px) saturate(1.35);">
-    <div ref="{{ blobA }}" style="position: absolute; left: 8%; top: 12%; width: 46%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(46,190,110,.62) 0%, rgba(46,190,110,.22) 46%, rgba(46,190,110,0) 74%); will-change: transform;"></div>
-    <div ref="{{ blobB }}" style="position: absolute; right: 6%; top: 8%; width: 44%; height: 48%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(232,64,150,.58) 0%, rgba(232,64,150,.2) 46%, rgba(232,64,150,0) 74%); will-change: transform;"></div>
-    <div ref="{{ blobC }}" style="position: absolute; right: 16%; bottom: 6%; width: 50%; height: 52%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(96,150,255,.5) 0%, rgba(96,150,255,.18) 48%, rgba(96,150,255,0) 76%); will-change: transform;"></div>
-    <div ref="{{ blobD }}" style="position: absolute; left: 12%; bottom: 10%; width: 42%; height: 46%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,196,78,.46) 0%, rgba(255,196,78,.16) 48%, rgba(255,196,78,0) 76%); will-change: transform;"></div>
+  <div ref="{{ wash }}" style="position: absolute; inset: -20%; z-index: 0; pointer-events: none; filter: blur(78px) saturate(1.02);">
+    <div ref="{{ blobA }}" style="position: absolute; left: 8%; top: 12%; width: 46%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.9) 0%, rgba(198,246,220,.42) 36%, rgba(198,246,220,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobB }}" style="position: absolute; right: 6%; top: 8%; width: 44%; height: 48%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.88) 0%, rgba(255,210,233,.4) 36%, rgba(255,210,233,0) 74%); will-change: transform;"></div>
+    <div ref="{{ blobC }}" style="position: absolute; right: 16%; bottom: 6%; width: 50%; height: 52%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.84) 0%, rgba(208,231,255,.38) 38%, rgba(208,231,255,0) 76%); will-change: transform;"></div>
+    <div ref="{{ blobD }}" style="position: absolute; left: 12%; bottom: 10%; width: 42%; height: 46%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.82) 0%, rgba(232,236,244,.34) 38%, rgba(232,236,244,0) 76%); will-change: transform;"></div>
   </div>
   <canvas ref="{{ sphereDust }}" style="position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
   <canvas ref="{{ sphereDustFront }}" style="position: absolute; inset: 0; z-index: 2200; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
   <div style="position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 86% at 50% 46%, transparent 42%, rgba(245,243,239,.85) 100%);"></div>
 
   <div ref="{{ wall }}" style="position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none;">
-    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, #c6c3bf 0%, #d5d2ce 26%, #dad7d3 48%, #cecbc7 72%, #bab7b3 92%, #a9a6a3 100%);"></div>
-    <div style="position: absolute; inset: 0; background: radial-gradient(150% 90% at 50% 44%, transparent 30%, rgba(18,18,20,.18) 74%, rgba(14,14,16,.4) 100%);"></div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, #ecebe8 0%, #f4f3f0 26%, #f7f6f3 48%, #f0efec 72%, #e6e5e2 92%, #dcdbd8 100%);"></div>
+    <div style="position: absolute; inset: 0; background: radial-gradient(150% 90% at 50% 44%, transparent 38%, rgba(18,18,20,.06) 78%, rgba(14,14,16,.14) 100%);"></div>
     <div ref="{{ lights }}" style="position: absolute; inset: 0;"></div>
   </div>
 
@@ -652,22 +681,18 @@
              image and lastElementChild as the glass, so appending at the end
              would silently hand the sheen logic the wrong element.
 
-             The ring is the artwork's border lit with the same holographic
-             conic gradient the toggle and the buy buttons use, turning on
-             holoSpin.
-
-             It is a MASKED FRAME, not a panel behind the image: the mask pair
-             punches out the content box and leaves only the 4px edge, so the
-             gradient draws as a stroke on top of the artwork. Sitting it behind
-             the image instead — the obvious approach, and the one I tried first
-             — showed only whatever peeked past the edges, and against a wall of
-             pastel neighbours that read as grey haze rather than a lit border.
+             The border is the holoEdge keyframe applied to the IMAGE itself,
+             cycling the same palette the toggle and buy buttons use. It began
+             as a separate masked ring element; that could not be kept aligned,
+             because a filter or an absolutely-positioned box does not survive
+             the perspective() and rotateY/rotateX the tile is drawn with, and
+             the frame ended up askew of the piece. A box-shadow belongs to the
+             image's own box and cannot come apart from it.
 
              The + is the click cue: small, in the corner, carrying the same
              gradient with holoHue cycling through it. It replaced a large
              expand glyph in the middle of the piece, which covered the artwork
              it was inviting you to look at. -->
-        <span data-ring="1" style="position: absolute; inset: -5px; border-radius: 3px; padding: 4px; filter: saturate(1.9); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoSpin 6s linear infinite; opacity: 0; pointer-events: none; transition: opacity .28s ease;"></span>
         <span data-cue="1" style="position: absolute; right: -10px; top: -10px; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoHue 9s linear infinite; box-shadow: 0 4px 14px rgba(20,23,26,.3), inset 0 0 0 1px rgba(255,255,255,.72); color: #14171a; opacity: 0; transform: scale(.7); pointer-events: none; transition: opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
         </span>
@@ -747,7 +772,7 @@
                whole time you were looking at it. The X below says the same
                thing once, quietly, in a corner. -->
           <div onClick="{{ closeTile }}" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
-          <button onClick="{{ closeTile }}" aria-label="Close" style="position: absolute; z-index: 3; top: clamp(14px, 2.2vh, 26px); right: clamp(14px, 2.2vw, 28px); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; appearance: none; border: 0; border-radius: 50%; background: transparent; color: rgba(20,23,26,.38); cursor: pointer; transition: color .25s ease, background .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);" style-hover="color: #14171a; background: rgba(20,23,26,.06); transform: rotate(90deg);">
+          <button data-lb-close="1" onClick="{{ closeTile }}" aria-label="Close" style="position: absolute; z-index: 3; top: clamp(14px, 2.2vh, 26px); right: clamp(14px, 2.2vw, 28px); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; appearance: none; border: 0; border-radius: 50%; background: transparent; color: rgba(20,23,26,.38); cursor: pointer; transition: color .25s ease, background .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);" style-hover="color: #14171a; background: rgba(20,23,26,.06); transform: rotate(90deg);">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
           </button>
           <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
@@ -760,7 +785,6 @@
               </div>
               <span style="position: absolute; inset: 0; pointer-events: none; background: linear-gradient(116deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.02) 26%, rgba(255,255,255,0) 46%, rgba(255,255,255,0) 68%, rgba(255,255,255,.08) 84%, rgba(255,255,255,.22) 100%);"></span>
             </div>
-            <span ref="{{ zoomHint }}" style="display: block; margin-top: 16px; text-align: center; font-size: 9px; letter-spacing: .26em; text-transform: uppercase; color: rgba(20,23,26,.42); pointer-events: none; transition: opacity .3s ease;">Hover to inspect</span>
           </div>
 
           <button onClick="{{ lbPrev }}" aria-label="Previous work" style="position: absolute; z-index: 2; top: 50%; left: clamp(10px, 2.4vw, 34px); transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; appearance: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: transparent; color: rgba(20,23,26,.7); cursor: pointer; transition: background .35s ease, color .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);" style-hover="background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); color: #14171a; transform: translateY(-50%) scale(1.1);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 7.5 12l7 7"></path></svg></button>
@@ -836,10 +860,13 @@
         </aside>
       </div>
 
-      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; display: flex; gap: 8px; align-items: flex-end; overflow-x: auto; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
+      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; overflow-x: visible; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
         <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
-          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0;">
-            <img data-src="{{ w.src }}" alt="" style="display: block; height: clamp(44px, 7vh, 62px); width: auto; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
+          <!-- Fixed square tiles: every artwork gets the same footprint, whatever
+               its own proportions, so the strip reads as one row of equals
+               rather than a ragged line of different heights. -->
+          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0; width: clamp(58px, 5.6vw, 84px); height: clamp(58px, 5.6vw, 84px); border-radius: 3px; overflow: hidden;">
+            <img data-src="{{ w.src }}" alt="" style="display: block; width: 100%; height: 100%; object-fit: cover; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
           </button>
         </sc-for>
       </div>
@@ -878,8 +905,12 @@
       </div>
     </div>
     <div ref="{{ meter }}" style="position: absolute; left: 50%; bottom: clamp(56px, 12vh, 110px); width: min(560px, 78vw); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; opacity: 0; transition: opacity .6s ease;">
-      <div style="flex: 1; height: 1px; background: rgba(255,255,255,.13);">
-        <div ref="{{ bar }}" style="width: 0%; height: 100%; background: #f4f2ee;"></div>
+      <!-- 2px, not 1: the holographic gradient needs something to read in.
+           The fill carries the same conic the toggle and buy buttons use, with
+           holoHue cycling it, so the loader introduces the palette the rest of
+           the site is built on instead of a plain white rule. -->
+      <div style="flex: 1; height: 2px; background: rgba(255,255,255,.13); border-radius: 2px; overflow: hidden;">
+        <div ref="{{ bar }}" style="width: 0%; height: 100%; border-radius: 2px; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); background-size: 220% 220%; animation: holoHue 6s linear infinite; box-shadow: 0 0 12px rgba(226,240,255,.55);"></div>
       </div>
       <div ref="{{ pct }}" style="font-size: 10px; letter-spacing: .24em; color: rgba(244,242,238,.5); min-width: 44px; text-align: right;">000</div>
     </div>
@@ -1405,11 +1436,19 @@ class Component extends DCLogic {
     const my = this.my == null ? h * 0.5 : this.my;
     const nx = (mx / w - 0.5) * 2, ny = (my / h - 0.5) * 2;
     if (!this.blobs) {
+      /* `lag` is how much of the distance to the target each blob closes per
+         frame, and at 0.006-0.020 they crawled: they were following the pointer
+         the whole time, just far too slowly to read as following anything. The
+         lift here is what turns drift into response. Each still moves at its
+         own rate — the nearest quickest, the furthest slowest — so the field
+         keeps its depth instead of sliding as one sheet.
+
+         `pull` is how far the pointer can drag them, also raised. */
       this.blobs = [
-        { el: "blobAEl", lag: 0.020, pull: 190, sx: 1.00, sy: 0.62, ph: 0.0, sp: 0.17, amp: 62 },
-        { el: "blobBEl", lag: 0.014, pull: 230, sx: 0.74, sy: 1.10, ph: 2.1, sp: 0.13, amp: 78 },
-        { el: "blobCEl", lag: 0.009, pull: 265, sx: 1.20, sy: 0.85, ph: 4.0, sp: 0.10, amp: 92 },
-        { el: "blobDEl", lag: 0.006, pull: 300, sx: 0.88, sy: 1.24, ph: 5.4, sp: 0.08, amp: 108 }
+        { el: "blobAEl", lag: 0.115, pull: 300, sx: 1.00, sy: 0.62, ph: 0.0, sp: 0.17, amp: 62 },
+        { el: "blobBEl", lag: 0.092, pull: 350, sx: 0.74, sy: 1.10, ph: 2.1, sp: 0.13, amp: 78 },
+        { el: "blobCEl", lag: 0.070, pull: 400, sx: 1.20, sy: 0.85, ph: 4.0, sp: 0.10, amp: 92 },
+        { el: "blobDEl", lag: 0.052, pull: 450, sx: 0.88, sy: 1.24, ph: 5.4, sp: 0.08, amp: 108 }
       ];
       for (const b of this.blobs) { b.x = 0; b.y = 0; }
     }
@@ -2173,32 +2212,82 @@ class Component extends DCLogic {
          cursor lifts slightly and shows an expand cue. The lift has to be
          folded into the transform the loop writes every frame — a CSS :hover
          rule would be overwritten on the very next one. */
-      const hot = wS > 0.5 && this.hoverNode === node && this.state.lb < 0;
-      const lift = hot ? 1.07 : 1;
+      const hot = (wS > 0.5 || m > 0.5) && this.hoverNode === node && this.state.lb < 0;
+      /* --- COLLECTION SWAP ------------------------------------------------
+         One 620ms move, applied to every wall piece at once and staggered a
+         little by position, so the room changes hang: out to the right with a
+         turn away from the viewer, then the new selection swings in from the
+         left and settles. `k` runs 0..1; the halfway point is where the DOM has
+         already changed over, which is why the outgoing half is the first 46%
+         and the incoming half picks up after it with no gap.
 
-      node.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
-        + " perspective(1600px) rotateY(" + tiltY.toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
+         It is computed per piece rather than on the container because each
+         piece already carries its own transform, and multiplying a container
+         transform on top would fight the wall's own perspective. */
+      let swapX = 0, swapRot = 0, swapFade = 1;
+      if (m > 0.5 && this.colSwapAt) {
+        const k = (performance.now() - this.colSwapAt) / 620;
+        if (k >= 1) { this.colSwapAt = 0; }
+        else {
+          const stag = Math.min(0.22, Math.abs(gx) / (w * 4));
+          const kk = Math.max(0, Math.min(1, (k - stag) / (1 - stag)));
+          const ease = kk < 0.5 ? 4 * kk * kk * kk : 1 - Math.pow(-2 * kk + 2, 3) / 2;
+          if (kk < 0.46) {
+            const o = ease / 0.5;
+            swapX = o * w * 0.42; swapRot = -o * 26; swapFade = 1 - o;
+          } else {
+            const i2 = (ease - 0.5) / 0.5;
+            swapX = (1 - i2) * -w * 0.34; swapRot = (1 - i2) * 20; swapFade = i2;
+          }
+        }
+      }
+
+      /* Ease the hover instead of snapping it. `__hv` chases 0 or 1 a little
+         each frame, so a piece grows into the hover and shrinks back out of it
+         rather than jumping between two sizes — which is what made the old
+         affordance feel abrupt. Everything the hover drives reads from this one
+         weight, so the scale, the lit edge and the cue all move together. */
+      const hv0 = node.__hv === undefined ? 0 : node.__hv;
+      const hv = hv0 + ((hot ? 1 : 0) - hv0) * 0.16;
+      node.__hv = hv < 0.001 ? 0 : hv;
+      const lift = 1 + hv * (m > 0.5 ? 0.045 : 0.075);
+
+      node.style.transform = "translate(" + (px + swapX).toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)"
+        + " perspective(1600px) rotateY(" + (tiltY + swapRot).toFixed(2) + "deg) rotateX(" + tiltX.toFixed(2) + "deg) rotate(" + spinZ.toFixed(2) + "deg)"
         + " scale(" + (scale * lift).toFixed(3) + ")";
 
       /* Written only on change: this runs for every artwork every frame. */
       if (node.__hot !== hot) {
         node.__hot = hot;
-        const ring = node.children[1], cue = node.children[2];
-        if (ring && ring.dataset && ring.dataset.ring) {
-          ring.style.opacity = hot ? "1" : "0";
+        const art = node.children[0], cue = node.children[1];
+        if (art && art.tagName === "IMG") {
+          /* In the sphere the artwork has no frame, so the lit edge IS the
+             border. On the wall it is already matted in white — so light the
+             mat itself, which is that same border, and leave the edge alone. */
+          const wall = m > 0.5;
+          art.style.animation = hot ? (wall ? "holoMat 4.2s linear infinite"
+                                            : "holoEdge 3.6s linear infinite") : "";
+          if (!hot) {
+            art.style.boxShadow = wall ? "0 0 0 1px rgba(20,23,26,.16)" : "";
+            if (wall) art.style.borderColor = "#fbfaf8";
+          }
         }
         if (cue && cue.dataset && cue.dataset.cue) {
-          cue.style.opacity = hot ? "1" : "0";
-          cue.style.transform = hot ? "scale(1)" : "scale(.7)";
+          cue.style.opacity = hot && m <= 0.5 ? "1" : "0";
         }
+      }
+      /* The cue rides the eased weight too, so it scales up with the piece. */
+      const cueEl = node.children[1];
+      if (cueEl && cueEl.dataset && cueEl.dataset.cue && hv > 0.002) {
+        cueEl.style.transform = "scale(" + (0.7 + hv * 0.3).toFixed(3) + ")";
       }
       const opS = 0.42 + 0.58 * depth;
       const opG = 1 - off * 0.3;
       /* A hovered piece comes fully forward — depth-dimming it while it is the
          one being pointed at fights the affordance — and rises above its
          neighbours so the cue is not covered by a card in front. */
-      const op = (opS * wS + opG * m) * ei;
-      node.style.opacity = (hot ? Math.max(op, 0.96) : op).toFixed(3);
+      const op = (opS * wS + opG * m) * ei * swapFade;
+      node.style.opacity = (hot ? Math.max(op, 0.96 * swapFade) : op).toFixed(3);
       node.style.zIndex = hot ? "1999" : String(m > 0.5 ? 2000 - Math.round(bend) : 1000 + Math.round(sz));
       node.style.pointerEvents = (m > 0.5 || depth > 0.52) ? "auto" : "none";
 
@@ -2319,6 +2408,10 @@ class Component extends DCLogic {
         const k = parseInt(b.getAttribute("data-col"), 10);
         if (!isNaN(k)) {
           this.pan = 0; this.panVel = 0; this.panTarget = null;
+          /* Stamp the swap so the wall can play it as a change of hang rather
+             than a cut: the works on show turn and leave to the right, and the
+             new collection turns in behind them. See colSwapAt in frame(). */
+          if (k !== this.state.col && this.state.view === "gallery") this.colSwapAt = performance.now();
           this.setState({ col: k, colOpen: false, view: k === 0 ? "sphere" : "gallery" });
         }
       },
@@ -2326,17 +2419,14 @@ class Component extends DCLogic {
       lbFrame: el => { this.lbFrameEl = el; },
       lbImg: el => { this.lbImgEl = el; this.syncLb(); },
       lbZoom: el => { this.lbZoomEl = el; },
-      zoomHint: el => { this.zoomHintEl = el; },
       zoomIn: () => {
         if (this.lbImgEl) this.lbImgEl.style.transform = "scale(2.4)";
-        if (this.zoomHintEl) this.zoomHintEl.style.opacity = "0";
       },
       zoomOut: () => {
         if (this.lbImgEl) {
           this.lbImgEl.style.transformOrigin = "50% 50%";
           this.lbImgEl.style.transform = "scale(1)";
         }
-        if (this.zoomHintEl) this.zoomHintEl.style.opacity = "1";
       },
       zoomMove: e => {
         if (!this.lbImgEl) return;

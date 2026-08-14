@@ -231,21 +231,28 @@ console.log("\nthe loader's dust targets follow the wordmark rather than freezin
 console.log("\nthe sphere says its artwork is clickable");
 {
   ok(/data-cue="1"/.test(html), "each artwork carries a click cue");
-  ok(/data-ring="1"/.test(html), "and a ring that lights its border");
+  ok(/@keyframes holoEdge/.test(html), "and an animated edge for its border");
   // Both reuse the site's holographic gradient rather than a lookalike, and
   // both animate with the existing keyframes.
   const tileHtml = html.match(/<div data-work="1"[\s\S]*?<\/div>/)[0];
   ok(/conic-gradient\(from 0deg at 50% 50%, #ffd6e8/.test(tileHtml),
      "the hover gradient is the same conic the toggle and buy buttons use");
-  ok(/animation: holoSpin/.test(tileHtml) && /animation: holoHue/.test(tileHtml),
-     "the ring turns and the cue cycles hue, on the existing keyframes");
-  ok(/mask-composite: exclude/.test(tileHtml) && /padding: 4px/.test(tileHtml),
-     "the ring is a masked stroke, so the gradient reads as a border not a haze");
+  ok(/animation: holoHue/.test(tileHtml),
+     "the cue cycles hue on the existing keyframe");
+  // The edge rides the image's own box. A sibling element cannot be kept
+  // aligned with an artwork drawn through perspective() and rotateY/rotateX.
+  ok(/art\.style\.animation = hot \?/.test(html) && /holoEdge 3\.6s/.test(html),
+     "the lit edge is animated on the image itself, so it cannot sit askew");
+  ok(/holoMat 4\.2s/.test(html) && /@keyframes holoMat/.test(html),
+     "on the wall it lights the mat instead, which is the frame's own border");
+  ok(!/data-ring/.test(html), "the separate ring element is gone");
   ok(!/M14 4h6v6/.test(html), "the old centre expand glyph is gone");
   ok(/this\.hoverNode = this\.drag \? null : over/.test(html),
      "the cue follows the pointer, and is suppressed mid-drag");
-  ok(/const hot = wS > 0\.5 && this\.hoverNode === node/.test(html),
-     "it is a sphere-only affordance, off in the wall view");
+  ok(/const hot = \(wS > 0\.5 \|\| m > 0\.5\) && this\.hoverNode === node/.test(html),
+     "hover is live in both views, and each lights what it has");
+  ok(/node\.__hv = hv/.test(html) && /hv0 \+ \(\(hot \? 1 : 0\) - hv0\)/.test(html),
+     "the hover eases in and out rather than snapping between two sizes");
   ok(/scale\(" \+ \(scale \* lift\)/.test(html),
      "the lift is folded into the per-frame transform, not left to CSS");
   ok(/node\.__hot !== hot/.test(html),
@@ -253,11 +260,10 @@ console.log("\nthe sphere says its artwork is clickable");
   // The cue sits between the image and the sheen: the loop reads
   // firstElementChild as the image and lastElementChild as the glass.
   const tile = html.match(/<div data-work="1"[\s\S]*?<\/div>/)[0];
-  const iImg = tile.indexOf("<img"), iRing = tile.indexOf("data-ring"),
-        iCue = tile.indexOf("data-cue"), iGlass = tile.indexOf("data-glass");
-  ok(iImg < iRing && iRing < iCue && iCue < iGlass,
-     "image, ring, cue, sheen — in that order, so first/lastElementChild still resolve");
-  ok(/const ring = node\.children\[1\], cue = node\.children\[2\]/.test(html),
+  const iImg = tile.indexOf("<img"), iCue = tile.indexOf("data-cue"), iGlass = tile.indexOf("data-glass");
+  ok(iImg < iCue && iCue < iGlass,
+     "image, cue, sheen — in that order, so first/lastElementChild still resolve");
+  ok(/const art = node\.children\[0\], cue = node\.children\[1\]/.test(html),
      "the render loop reads them at the indexes that order gives");
 }
 
