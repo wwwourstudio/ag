@@ -170,7 +170,14 @@ function richText(doc) {
    returns, so a store that has one but not the other still reads.
    @param {any} product */
 function descriptionOf(product) {
-  const plain = product.plainDescription || '';
+  /* typeof, not truthiness. `plainDescription` is a string today, but its
+     sibling `description` from the same projection is an OBJECT, and one
+     `.replace` on an object throws — inside toArtwork, inside a bare .map(),
+     which sendCatalog catches as a total failure. A single odd product would
+     take the whole wall down, where the line this replaced could only ever
+     have produced a blank blurb. Defensive code that can throw is not
+     defensive. */
+  const plain = typeof product.plainDescription === 'string' ? product.plainDescription : '';
   const stripped = plain
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<\/p>\s*<p[^>]*>/gi, ' ')
@@ -218,9 +225,17 @@ function imageUrlOf(entry) {
   if (typeof img === 'string') {
     const internal = img.match(/^wix:image:\/\/v1\/([^/#]+)/);
     if (internal) return 'https://static.wixstatic.com/media/' + internal[1];
+    /* Protocol-relative and bare-id forms are real Wix shapes too. */
+    if (img.indexOf('//') === 0) return 'https:' + img;
     return img.indexOf('http') === 0 ? img : '';
   }
-  return (img && img.url) || '';
+  /* A string, always. webImage() calls .indexOf on whatever comes back, so a
+     `url` that arrives as an object throws there instead — and that throw lands
+     in toArtwork's .map(), which sendCatalog reports as a total failure. This
+     function's whole promise is "whatever shape it arrives in"; it checked
+     every branch except the one it returned from. */
+  const url = img && img.url;
+  return typeof url === 'string' ? url : '';
 }
 
 /* When an artwork has no usable image, print the media object ONCE, expanded.
@@ -402,9 +417,10 @@ function toArtwork(product, info, inventory, names) {
      five fields and none of them media, as this did, and media comes back
      empty, which is how eleven products arrived image-less. So the rule is not
      "main needs the field", it is "once you project, you get only what you
-     project". Same reason PLAIN_DESCRIPTION had to be added beside it. */
+     project". Same reason PLAIN_DESCRIPTION had to be added beside it.
 
-     Read through imageUrl(), not `.image.url` directly. REST returns `image` as
+     Read through imageUrlOf(), not `.image.url` directly. REST returns `image`
+     as
      an object carrying a url, but the SDK has also handed back a bare string —
      and `('https://...').url` is undefined, which is silent. That produced
 

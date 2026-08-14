@@ -9,8 +9,19 @@ const w = 1440, h = 900;
 // They were retuned because the old framing (mn * 1.12, f 1750) put only 5 or 6
 // of eleven pieces on screen at once and let one card span half the window.
 const mn = Math.min(w, h);
-const R = mn * 0.66, f = 2750;
-const CARD = 300 * (mn / 1700);   // tile width * fitS, before perspective
+const f = 2750;
+// The desktop geometry index.html computes, INCLUDING its growth with the
+// catalogue: the radius spreads and the cards shrink as works are added, so a
+// fifty-piece store does not congeal into a solid ball. Kept as functions of N
+// rather than literals, because a model pinned to one catalogue size is how
+// this file previously passed against a sphere the site never drew.
+const REF = 11;
+const spreadOf = (n) => Math.min(1.5, Math.max(0.85, Math.pow(Math.max(1, n) / REF, 0.34)));
+const shrinkOf = (n) => Math.min(1.15, Math.max(0.5, Math.pow(REF / Math.max(1, n), 0.42)));
+const radiusOf = (n) => mn * 0.70 * spreadOf(n);
+const cardOf = (n) => 300 * (mn / 1180) * shrinkOf(n);
+let R = radiusOf(11);
+const CARD = cardOf(11);
 
 function place(j, N, rotY, rotX) {
   const yUnit = N > 1 ? (1 - (j / (N - 1)) * 2) * 0.97 : 0;
@@ -90,6 +101,42 @@ for (let step = 0; step < 240; step++) {
 }
 console.log(`at worst ${worstInFrame} of ${N} artworks are in frame at once`);
 if (worstInFrame < 8) { fails++; console.log("  FAIL too few artworks visible at once"); }
+
+// The sphere has to stay legible as the catalogue grows: never so tight that
+// everything overlaps, never so wide that the gallery empties out.
+console.log("\nthe sphere grows with the catalogue");
+for (const n of [5, 11, 25, 50, 120]) {
+  const Rn = radiusOf(n), cardN = cardOf(n);
+  let worst = 999, best = 0;
+  for (let step = 0; step < 120; step++) {
+    const rx = (step / 120) * Math.PI * 2;
+    let inFrame = 0;
+    for (let j = 0; j < n; j++) {
+      const yUnit = n > 1 ? (1 - (j / (n - 1)) * 2) * 0.97 : 0;
+      const phi = Math.acos(yUnit);
+      const a = j * GA + rx * PRECESS;
+      let sx = Rn * Math.sin(phi) * Math.cos(a);
+      let sy = Rn * 0.95 * Math.cos(phi);
+      let sz = Rn * Math.sin(phi) * Math.sin(a);
+      const c = Math.cos(rx), s2 = Math.sin(rx);
+      const sy2 = sy * c - sz * s2, sz2 = sy * s2 + sz * c;
+      sy = sy2; sz = sz2;
+      const persp = f / (f - sz);
+      const x = w / 2 + sx * persp, y = h / 2 + sy * persp;
+      const half = (cardN * persp) / 2;
+      if (x + half > 0 && x - half < w && y + half > 0 && y - half < h) inFrame++;
+    }
+    worst = Math.min(worst, inFrame);
+    best = Math.max(best, inFrame);
+  }
+  // Enough on screen to read as a gallery, and cards never shrink to specks.
+  const okCount = worst >= Math.min(5, n);
+  const okSize = cardN * 0.7 >= 60;
+  const line = `N=${String(n).padStart(3)}  in frame ${String(worst).padStart(2)}-${String(best).padStart(2)}` +
+               `  card ~${Math.round(cardN)}px`;
+  if (okCount && okSize) console.log("  ok   " + line);
+  else { fails++; console.log("  FAIL " + line); }
+}
 
 console.log(fails ? `\n${fails} FAILED` : "\nsphere checks passed");
 process.exit(fails ? 1 : 0);
