@@ -231,6 +231,17 @@ console.log("\nthe loader's dust targets follow the wordmark rather than freezin
 console.log("\nthe sphere says its artwork is clickable");
 {
   ok(/data-cue="1"/.test(html), "each artwork carries a click cue");
+  ok(/data-ring="1"/.test(html), "and a ring that lights its border");
+  // Both reuse the site's holographic gradient rather than a lookalike, and
+  // both animate with the existing keyframes.
+  const tileHtml = html.match(/<div data-work="1"[\s\S]*?<\/div>/)[0];
+  ok(/conic-gradient\(from 0deg at 50% 50%, #ffd6e8/.test(tileHtml),
+     "the hover gradient is the same conic the toggle and buy buttons use");
+  ok(/animation: holoSpin/.test(tileHtml) && /animation: holoHue/.test(tileHtml),
+     "the ring turns and the cue cycles hue, on the existing keyframes");
+  ok(/mask-composite: exclude/.test(tileHtml) && /padding: 4px/.test(tileHtml),
+     "the ring is a masked stroke, so the gradient reads as a border not a haze");
+  ok(!/M14 4h6v6/.test(html), "the old centre expand glyph is gone");
   ok(/this\.hoverNode = this\.drag \? null : over/.test(html),
      "the cue follows the pointer, and is suppressed mid-drag");
   ok(/const hot = wS > 0\.5 && this\.hoverNode === node/.test(html),
@@ -242,9 +253,12 @@ console.log("\nthe sphere says its artwork is clickable");
   // The cue sits between the image and the sheen: the loop reads
   // firstElementChild as the image and lastElementChild as the glass.
   const tile = html.match(/<div data-work="1"[\s\S]*?<\/div>/)[0];
-  const iImg = tile.indexOf("<img"), iCue = tile.indexOf("data-cue"), iGlass = tile.indexOf("data-glass");
-  ok(iImg < iCue && iCue < iGlass,
-     "the cue sits between the image and the sheen, so neither is displaced");
+  const iImg = tile.indexOf("<img"), iRing = tile.indexOf("data-ring"),
+        iCue = tile.indexOf("data-cue"), iGlass = tile.indexOf("data-glass");
+  ok(iImg < iRing && iRing < iCue && iCue < iGlass,
+     "image, ring, cue, sheen — in that order, so first/lastElementChild still resolve");
+  ok(/const ring = node\.children\[1\], cue = node\.children\[2\]/.test(html),
+     "the render loop reads them at the indexes that order gives");
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");

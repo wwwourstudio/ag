@@ -497,6 +497,14 @@
        A sold-out one keeps a trace of it, but stops moving. */
     [data-paper][data-sel="1"]::before,
     [data-paper][data-sel="1"]::after { opacity: 0; }
+    /* ...INCLUDING while hovered, which needs saying explicitly. The hover rule
+       above is [data-paper]:hover:not(:disabled) — an attribute plus two
+       pseudo-classes, (0,3,0) — and it outscored the (0,2,0) selected rule. So
+       pointing at the finish you had already chosen switched the shimmer back
+       on over the black, and the white label washed out to unreadable. Matching
+       hover here restores solid ink under the cursor. */
+    [data-paper][data-sel="1"]:hover::before,
+    [data-paper][data-sel="1"]:hover::after { opacity: 0; }
     [data-paper]:disabled::before { opacity: .16; animation: none; }
     [data-paper]:disabled::after { opacity: 0; }
     @media (prefers-reduced-motion: reduce) {
@@ -639,13 +647,29 @@
     <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
       <div data-work="1" style="position: absolute; left: 0; top: 0; width: 300px; cursor: pointer; will-change: transform, opacity; transform-origin: 50% 50%; -webkit-tap-highlight-color: transparent;">
         <img data-src="{{ w.src }}" alt="Artwork by Annie Green" style="display: block; width: 100%;">
-        <!-- Click cue. Sits BETWEEN the image and the sheen on purpose: the
-             render loop reads firstElementChild as the image and
-             lastElementChild as the glass, so appending it at the end would
-             silently make the sheen logic operate on this instead. Shown only
-             while the sphere is up and only on the piece under the cursor. -->
-        <span data-cue="1" style="position: absolute; left: 50%; top: 50%; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(20,23,26,.52); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 6px 20px rgba(20,23,26,.28), inset 0 0 0 1px rgba(255,255,255,.28); color: #fbfaf8; opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"></path><path d="M10 20H4v-6"></path><path d="M20 4l-7 7"></path><path d="M4 20l7-7"></path></svg>
+        <!-- Hover affordance, in two parts. Both sit BETWEEN the image and the
+             sheen on purpose: the render loop reads firstElementChild as the
+             image and lastElementChild as the glass, so appending at the end
+             would silently hand the sheen logic the wrong element.
+
+             The ring is the artwork's border lit with the same holographic
+             conic gradient the toggle and the buy buttons use, turning on
+             holoSpin.
+
+             It is a MASKED FRAME, not a panel behind the image: the mask pair
+             punches out the content box and leaves only the 4px edge, so the
+             gradient draws as a stroke on top of the artwork. Sitting it behind
+             the image instead — the obvious approach, and the one I tried first
+             — showed only whatever peeked past the edges, and against a wall of
+             pastel neighbours that read as grey haze rather than a lit border.
+
+             The + is the click cue: small, in the corner, carrying the same
+             gradient with holoHue cycling through it. It replaced a large
+             expand glyph in the middle of the piece, which covered the artwork
+             it was inviting you to look at. -->
+        <span data-ring="1" style="position: absolute; inset: -5px; border-radius: 3px; padding: 4px; filter: saturate(1.9); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoSpin 6s linear infinite; opacity: 0; pointer-events: none; transition: opacity .28s ease;"></span>
+        <span data-cue="1" style="position: absolute; right: -10px; top: -10px; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); animation: holoHue 9s linear infinite; box-shadow: 0 4px 14px rgba(20,23,26,.3), inset 0 0 0 1px rgba(255,255,255,.72); color: #14171a; opacity: 0; transform: scale(.7); pointer-events: none; transition: opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
         </span>
         <span data-glass="1" style="position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(112deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 44%, rgba(255,255,255,0) 64%, rgba(255,255,255,.16) 80%, rgba(255,255,255,.34) 100%);"></span>
       </div>
@@ -718,7 +742,14 @@
 
       <div data-lb-grid="1" style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
         <div data-lb-view="1" style="position: relative; display: grid; place-items: center; min-width: 0; padding: clamp(58px, 9vh, 96px) clamp(20px, 4vw, 56px) calc(clamp(112px, 16vh, 156px) + var(--ag-cut, 0px));">
-          <div onClick="{{ closeTile }}" title="Click anywhere to close" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
+          <!-- The backdrop still closes on click, but the tooltip is gone: it
+               was a black label trailing the cursor across the artwork the
+               whole time you were looking at it. The X below says the same
+               thing once, quietly, in a corner. -->
+          <div onClick="{{ closeTile }}" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
+          <button onClick="{{ closeTile }}" aria-label="Close" style="position: absolute; z-index: 3; top: clamp(14px, 2.2vh, 26px); right: clamp(14px, 2.2vw, 28px); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; appearance: none; border: 0; border-radius: 50%; background: transparent; color: rgba(20,23,26,.38); cursor: pointer; transition: color .25s ease, background .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);" style-hover="color: #14171a; background: rgba(20,23,26,.06); transform: rotate(90deg);">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+          </button>
           <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
           <div ref="{{ lbFrame }}" style="position: relative; z-index: 1; animation: lbIn .6s cubic-bezier(.2,.7,.2,1) both;">
             <div style="position: relative; padding: clamp(9px, 1.3vw, 17px); background: linear-gradient(148deg, #2c2d31 0%, #101012 40%, #1d1e21 100%); box-shadow: 0 60px 90px -46px rgba(20,23,26,.55), inset 0 2px 0 rgba(255,255,255,.16), inset 0 -2px 0 rgba(0,0,0,.6), 0 0 0 1px rgba(20,23,26,.1);">
@@ -2152,10 +2183,13 @@ class Component extends DCLogic {
       /* Written only on change: this runs for every artwork every frame. */
       if (node.__hot !== hot) {
         node.__hot = hot;
-        const cue = node.children[1];
+        const ring = node.children[1], cue = node.children[2];
+        if (ring && ring.dataset && ring.dataset.ring) {
+          ring.style.opacity = hot ? "1" : "0";
+        }
         if (cue && cue.dataset && cue.dataset.cue) {
           cue.style.opacity = hot ? "1" : "0";
-          cue.style.transform = hot ? "scale(1)" : "scale(.8)";
+          cue.style.transform = hot ? "scale(1)" : "scale(.7)";
         }
       }
       const opS = 0.42 + 0.58 * depth;
