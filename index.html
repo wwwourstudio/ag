@@ -671,6 +671,14 @@
   <div ref="{{ wallHead }}" style="position: absolute; left: clamp(18px, 3vw, 34px); top: clamp(16px, 2.6vh, 28px); z-index: 2600; width: min(560px, 62vw); text-align: left; opacity: 0; pointer-events: none;">
     <h2 ref="{{ wallHeadTitle }}" style="margin: 0; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(22px, 2.4vw, 32px); font-weight: 300; letter-spacing: .05em; line-height: 1.05; text-transform: uppercase; color: #14171a; white-space: nowrap; text-align: left;"></h2>
     <p ref="{{ wallHeadBlurb }}" style="margin: 7px 0 0; max-width: 46ch; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(11.5px, 1vw, 13px); font-weight: 400; line-height: 1.5; color: rgba(20,23,26,.72); text-align: left;"></p>
+    <!-- On "View all" there is no category and so no description. The artist's
+         wordmark stands in its place — the same lockup the lightbox uses under
+         a piece's title, at the same proportions: Jost 200 for ANNIE, Archivo
+         Black for GREEN, baseline aligned. -->
+    <div ref="{{ wallHeadMark }}" style="margin: 9px 0 0; display: none; align-items: baseline; gap: .1em; text-transform: uppercase; line-height: .9; color: #14171a;">
+      <span style="font-weight: 200; font-size: clamp(13px, 1.15vw, 16px); letter-spacing: .02em;">Annie</span>
+      <span style="font-family: 'Archivo Black', 'Jost', sans-serif; font-weight: 900; font-size: clamp(13px, 1.15vw, 16px); letter-spacing: -.038em;">Green</span>
+    </div>
   </div>
 
   <div ref="{{ vignette }}" style="position: absolute; inset: 0; z-index: 2500; pointer-events: none; background: radial-gradient(122% 84% at 50% 47%, rgba(20,23,26,0) 46%, rgba(20,23,26,.07) 74%, rgba(20,23,26,.19) 100%);"></div>
@@ -2043,8 +2051,14 @@ class Component extends DCLogic {
     if (this.wallHeadEl) {
       this.wallHeadEl.style.opacity = (m * chromeIn).toFixed(3);
       const col = this.collectionData()[this.state.col];
-      const title = !col || col.key === "all" ? "Selected works" : col.label;
-      const blurb = (col && col.blurb) || "";
+      /* "View all" is the whole gallery rather than one of the store's
+         categories, so it has no name and no description of its own: it gets
+         ART GALLERY, with the artist's wordmark where a category's description
+         would sit. Every other entry is a real collection and shows its own
+         name and header text. */
+      const isAll = !col || col.key === "all";
+      const title = isAll ? "Art gallery" : col.label;
+      const blurb = isAll ? "" : ((col && col.blurb) || "");
       if (this._headTitle !== title) {
         this._headTitle = title;
         if (this.wallHeadTitleEl) this.wallHeadTitleEl.textContent = title;
@@ -2055,6 +2069,10 @@ class Component extends DCLogic {
           this.wallHeadBlurbEl.textContent = blurb;
           this.wallHeadBlurbEl.style.display = blurb ? "" : "none";
         }
+      }
+      if (this._headMark !== isAll) {
+        this._headMark = isAll;
+        if (this.wallHeadMarkEl) this.wallHeadMarkEl.style.display = isAll ? "flex" : "none";
       }
     }
 
@@ -2238,6 +2256,7 @@ class Component extends DCLogic {
       wallHead: el => { this.wallHeadEl = el; },
       wallHeadTitle: el => { this.wallHeadTitleEl = el; },
       wallHeadBlurb: el => { this.wallHeadBlurbEl = el; },
+      wallHeadMark: el => { this.wallHeadMarkEl = el; },
       blobA: el => { this.blobAEl = el; },
       blobB: el => { this.blobBEl = el; },
       blobC: el => { this.blobCEl = el; },
