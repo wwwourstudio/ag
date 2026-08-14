@@ -652,12 +652,18 @@
     </sc-for>
   </div>
 
-  <!-- Wall heading. The collection the wall is currently showing, with the
-       store's header description under it. Sits above the artwork and fades in
-       with the wall itself, so the sphere never carries it. -->
-  <div ref="{{ wallHead }}" style="position: absolute; left: 50%; top: clamp(70px, 10vh, 124px); transform: translateX(-50%); z-index: 900; width: min(760px, 84vw); text-align: center; opacity: 0; pointer-events: none;">
-    <h2 ref="{{ wallHeadTitle }}" style="margin: 0; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(14px, 1.5vw, 19px); font-weight: 400; letter-spacing: .22em; text-transform: uppercase; color: rgba(20,23,26,.84);"></h2>
-    <p ref="{{ wallHeadBlurb }}" style="margin: 11px auto 0; max-width: 58ch; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(11.5px, 1.02vw, 13.5px); font-weight: 300; line-height: 1.66; color: rgba(20,23,26,.55); text-wrap: pretty;"></p>
+  <!-- Wall heading: the collection on the wall, with the store's header
+       description under it.
+
+       TOP LEFT, deliberately — the same corner and the same left/top clamps the
+       wordmark uses. In wall mode the wordmark fades out, and this takes the
+       space it leaves rather than opening a second column of type in the
+       middle of the room. It reads as the label beside a hang.
+
+       Both lines fade with the wall itself, so the sphere never carries them. -->
+  <div ref="{{ wallHead }}" style="position: absolute; left: clamp(18px, 3vw, 34px); top: clamp(16px, 2.6vh, 28px); z-index: 900; width: min(560px, 62vw); text-align: left; opacity: 0; pointer-events: none;">
+    <h2 ref="{{ wallHeadTitle }}" style="margin: 0; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(22px, 2.4vw, 32px); font-weight: 300; letter-spacing: .05em; line-height: 1.05; text-transform: uppercase; color: #14171a; white-space: nowrap;"></h2>
+    <p ref="{{ wallHeadBlurb }}" style="margin: 7px 0 0; max-width: 46ch; font-family: 'Jost', system-ui, sans-serif; font-size: clamp(11.5px, 1vw, 13px); font-weight: 400; line-height: 1.5; color: rgba(20,23,26,.72);"></p>
   </div>
 
   <div ref="{{ vignette }}" style="position: absolute; inset: 0; z-index: 2500; pointer-events: none; background: radial-gradient(122% 84% at 50% 47%, rgba(20,23,26,0) 46%, rgba(20,23,26,.07) 74%, rgba(20,23,26,.19) 100%);"></div>
