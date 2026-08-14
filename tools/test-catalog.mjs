@@ -241,14 +241,18 @@ console.log("\nthe sphere says its artwork is clickable");
      "the cue cycles hue on the existing keyframe");
   // The edge rides the image's own box. A sibling element cannot be kept
   // aligned with an artwork drawn through perspective() and rotateY/rotateX.
-  ok(/art\.style\.animation = hot \? "holoEdge/.test(html),
+  ok(/art\.style\.animation = hot \?/.test(html) && /holoEdge 3\.6s/.test(html),
      "the lit edge is animated on the image itself, so it cannot sit askew");
+  ok(/holoMat 4\.2s/.test(html) && /@keyframes holoMat/.test(html),
+     "on the wall it lights the mat instead, which is the frame's own border");
   ok(!/data-ring/.test(html), "the separate ring element is gone");
   ok(!/M14 4h6v6/.test(html), "the old centre expand glyph is gone");
   ok(/this\.hoverNode = this\.drag \? null : over/.test(html),
      "the cue follows the pointer, and is suppressed mid-drag");
-  ok(/const hot = wS > 0\.5 && this\.hoverNode === node/.test(html),
-     "it is a sphere-only affordance, off in the wall view");
+  ok(/const hot = \(wS > 0\.5 \|\| m > 0\.5\) && this\.hoverNode === node/.test(html),
+     "hover is live in both views, and each lights what it has");
+  ok(/node\.__hv = hv/.test(html) && /hv0 \+ \(\(hot \? 1 : 0\) - hv0\)/.test(html),
+     "the hover eases in and out rather than snapping between two sizes");
   ok(/scale\(" \+ \(scale \* lift\)/.test(html),
      "the lift is folded into the per-frame transform, not left to CSS");
   ok(/node\.__hot !== hot/.test(html),
