@@ -565,8 +565,6 @@
         grid-template-columns: 1fr !important;
         grid-template-rows: auto auto !important;
         min-height: 100%;
-        /* Clear the pinned thumbnail strip, which floats over the scroll. */
-        padding-bottom: calc(104px + var(--ag-cut, 0px)) !important;
       }
       [data-lb-side] {
         order: 1 !important;
@@ -587,17 +585,17 @@
         max-width: min(88vw, 520px) !important;
         max-height: 38vh !important;
       }
-      /* Full width once the detail column is no longer beside it, and lifted
-         clear of the Wix banner's overhang the same way the home bar is —
-         pinned to the viewport rather than to the frame's bottom edge, which
-         on a free site sits below what the phone can actually show. Goes back
-         to flush once the plan is upgraded and the cut becomes 0. */
+      /* Full width once the detail column is no longer beside it. The Wix
+         banner's overhang is paid for in this element's own bottom padding
+         (--ag-cut) rather than by pinning it above the fold. */
+      /* IN THE FLOW, not pinned. Fixed positioning floated the strip over the
+         panel, so once the thumbnails wrapped to a second row they covered the
+         buy card underneath them. As the last item in a scrolling overlay it
+         simply follows the detail panel down. */
       [data-lb-strip] {
-        position: fixed !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: var(--ag-cut, 0px) !important;
-        transition: bottom .25s ease;
+        position: static !important;
+        padding: 4px clamp(16px, 5vw, 28px) calc(24px + var(--ag-cut, 0px)) !important;
+        background: none !important;
       }
     }
 
@@ -778,7 +776,7 @@
           <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
           <div ref="{{ lbFrame }}" style="position: relative; z-index: 1; animation: lbIn .6s cubic-bezier(.2,.7,.2,1) both;">
             <div style="position: relative; padding: clamp(9px, 1.3vw, 17px); background: linear-gradient(148deg, #2c2d31 0%, #101012 40%, #1d1e21 100%); box-shadow: 0 60px 90px -46px rgba(20,23,26,.55), inset 0 2px 0 rgba(255,255,255,.16), inset 0 -2px 0 rgba(0,0,0,.6), 0 0 0 1px rgba(20,23,26,.1);">
-              <div ref="{{ lbZoom }}" onMouseMove="{{ zoomMove }}" onMouseEnter="{{ zoomIn }}" onMouseLeave="{{ zoomOut }}" style="padding: clamp(10px, 1.8vw, 24px); background: #fbfaf8; box-shadow: inset 0 2px 7px rgba(20,23,26,.14); cursor: crosshair;">
+              <div ref="{{ lbZoom }}" style="padding: clamp(10px, 1.8vw, 24px); background: #fbfaf8; box-shadow: inset 0 2px 7px rgba(20,23,26,.14);">
                 <div style="position: relative; overflow: hidden;">
                   <img data-lb-img="1" ref="{{ lbImg }}" alt="Artwork enlarged" style="display: block; max-width: min(50vw, 700px); max-height: 52vh; width: auto; height: auto; transform-origin: 50% 50%; transition: transform .5s cubic-bezier(.2,.8,.2,1);">
                 </div>
@@ -2419,22 +2417,6 @@ class Component extends DCLogic {
       lbFrame: el => { this.lbFrameEl = el; },
       lbImg: el => { this.lbImgEl = el; this.syncLb(); },
       lbZoom: el => { this.lbZoomEl = el; },
-      zoomIn: () => {
-        if (this.lbImgEl) this.lbImgEl.style.transform = "scale(2.4)";
-      },
-      zoomOut: () => {
-        if (this.lbImgEl) {
-          this.lbImgEl.style.transformOrigin = "50% 50%";
-          this.lbImgEl.style.transform = "scale(1)";
-        }
-      },
-      zoomMove: e => {
-        if (!this.lbImgEl) return;
-        const r = this.lbImgEl.getBoundingClientRect();
-        const x = Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
-        const y = Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100));
-        this.lbImgEl.style.transformOrigin = x.toFixed(1) + "% " + y.toFixed(1) + "%";
-      },
       lbCollection: el => { this.lbCollectionEl = el; this.syncLb(); },
       lbTitle: el => { this.lbTitleEl = el; this.syncLb(); },
       lbTitleWrap: el => { this.lbTitleWrapEl = el; },
