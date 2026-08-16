@@ -316,6 +316,11 @@
         size: sectionOf(product, info, "size"),
         year: sectionOf(product, info, "year"),
         edition: parseInt(sectionOf(product, info, "edition"), 10) || 0,
+        /* The print's paper size, distinct from the original's dimensions
+           above. Matches the page code's read so both sources agree. */
+        printSize: sectionOf(product, info, "print size") ||
+                   sectionOf(product, info, "printsize") ||
+                   sectionOf(product, info, "print"),
         collections: collections.length ? collections : ["Works"],
         description: richText(product.description),
         price: origPrice,
@@ -595,11 +600,21 @@
          panel, so once the thumbnails wrapped to a second row they covered the
          buy card underneath them. As the last item in a scrolling overlay it
          simply follows the detail panel down. */
+      /* Three across and as large as that allows: on a phone the strip is the
+         only way to move between works, so the tiles have to be legible and
+         thumb-sized. The desktop strip stays small — it sits under artwork that
+         is already visible, and big tiles there just crowd it. */
       [data-lb-strip] {
         position: static !important;
         padding: 4px clamp(16px, 5vw, 28px) calc(24px + var(--ag-cut, 0px)) !important;
         background: #ffffff !important;
+        display: grid !important;
+        grid-auto-flow: column !important;
+        grid-auto-columns: calc((100% - 24px) / 3) !important;
+        gap: 12px !important;
+        scroll-snap-type: x mandatory;
       }
+      [data-lb-strip] [data-thumb] { width: 100% !important; }
     }
 
     /* Short landscape phones: give the artwork the height instead. Still
@@ -831,8 +846,8 @@
 
           <div data-lb-card="print" ref="{{ printCard }}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 11px; padding: 14px; border: 1px solid rgba(20,23,26,.14); background: rgba(255,255,255,.42); flex: none; transition: border-color .25s ease; border-radius: 10px;" style-hover="border-color: rgba(20,23,26,.28);">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-              <span style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.55);">Limited print</span>
-              <span ref="{{ lbEdition }}" style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.5);">Edition of 50</span>
+              <span style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.55);">Fine art prints</span>
+              <span ref="{{ lbEdition }}" style="font-size: 9px; letter-spacing: .17em; text-transform: uppercase; white-space: nowrap; color: rgba(20,23,26,.5);"></span>
             </div>
 
             <div ref="{{ paperMenu }}" onClick="{{ pickPaper }}" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;">
@@ -847,7 +862,7 @@
             <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 9px; border-top: 1px solid rgba(20,23,26,.12);">
               <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
                 <span ref="{{ lbPrintPrice }}" style="font-weight: 200; font-size: clamp(20px, 2vw, 25px); line-height: 1; letter-spacing: -.015em; color: #14171a;"></span>
-                <span style="font-size: 10px; font-weight: 300; line-height: 1.35; color: rgba(20,23,26,.5);">Giclée · archival inkjet on fine-art paper</span>
+                <span ref="{{ lbPaperNote }}" style="font-size: 10px; font-weight: 300; line-height: 1.35; color: rgba(20,23,26,.5);"></span>
               </span>
               <span ref="{{ lbPrintLeft }}" style="font-size: 10px; font-weight: 300; white-space: nowrap; color: rgba(20,23,26,.5);"></span>
             </div>
@@ -857,14 +872,14 @@
         </aside>
       </div>
 
-      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; max-width: 432px; margin-inline: auto; display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 24px) / 3); gap: 12px; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: #ffffff;">
+      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; display: flex; gap: 10px; align-items: center; justify-content: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: #ffffff;">
         <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
-          <!-- Three across, always. The tile takes a third of the strip's width
-               and squares itself, so every artwork gets the same footprint at
-               any window size and the fourth begins the scroll. Snapping is on
-               the tile, so the carousel comes to rest on a whole thumbnail
-               rather than halfway through one. -->
-          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0; width: 100%; aspect-ratio: 1 / 1; border-radius: 3px; overflow: hidden; scroll-snap-align: start;">
+          <!-- Square tiles, so every artwork has the same footprint whatever its
+               own proportions. Small on desktop and tablet, where the strip is
+               a quiet index beneath the artwork; the phone rule below turns
+               them into a three-wide carousel, where a thumbnail has to be big
+               enough to make out and to hit with a thumb. -->
+          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0; width: clamp(50px, 4.2vw, 66px); aspect-ratio: 1 / 1; border-radius: 3px; overflow: hidden; scroll-snap-align: start; flex: none;">
             <img data-src="{{ w.src }}" alt="" style="display: block; width: 100%; height: 100%; object-fit: cover; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
           </button>
         </sc-for>
@@ -1167,6 +1182,9 @@ class Component extends DCLogic {
         excerpt: p.description || "",
         medium: p.medium || "",
         size: p.size || "",
+        /* The print's paper size, carried through separately from the
+           original's dimensions above. */
+        printSize: p.printSize || "",
         year: p.year || "",
         price: typeof p.price === "number" ? p.price : 0,
         priceText: p.priceText || "",
@@ -1582,8 +1600,13 @@ class Component extends DCLogic {
        which drags the label out of alignment. The remaining count is handled
        in syncPrint, since it belongs to the selected finish. */
     if (this.lbEditionEl) {
-      this.lbEditionEl.textContent = w.edition ? ("Edition of " + w.edition) : "";
-      this.lbEditionEl.style.display = w.edition ? "" : "none";
+      /* The print's paper size, from the store's `print size` info section, in
+         the slot the edition count used to hold — it is what a buyer choosing
+         between finishes actually needs. Falls back to the edition when a piece
+         has no print size set, so nothing disappears from an unedited store. */
+      const label = w.printSize ? w.printSize : (w.edition ? "Edition of " + w.edition : "");
+      this.lbEditionEl.textContent = label;
+      this.lbEditionEl.style.display = label ? "" : "none";
     }
 
     const hasPrints = w.prints && Object.keys(w.prints).length;
@@ -1691,11 +1714,6 @@ class Component extends DCLogic {
     /* "37 left" counts the finish the buyer has actually selected. It used to
        print the cheapest finish's stock no matter which chip was active, so
        picking Metallic showed Matte's remaining count. */
-    if (this.lbPrintLeftEl) {
-      const left = cp && typeof cp.left === "number" ? cp.left : (w && w.left) || 0;
-      this.lbPrintLeftEl.textContent = left ? (left + " left") : "";
-      this.lbPrintLeftEl.style.display = left ? "" : "none";
-    }
     /* Wix formats its own prices; fall back to the local sum only when there
        is no live variant to read. */
     if (this.lbPrintPriceEl && w) {
@@ -1710,14 +1728,27 @@ class Component extends DCLogic {
       this.lbPrintBtnEl.style.opacity = (gone || missing) ? ".4" : "1";
       this.lbPrintBtnEl.style.pointerEvents = (gone || missing) ? "none" : "auto";
     }
-    /* Remaining count follows the chosen finish, since Wix tracks inventory
-       per variant. Untracked finishes report nothing and the label goes away
-       rather than showing a made-up number. */
+    /* Remaining count and paper description both follow the CHOSEN finish,
+       since Wix tracks inventory per variant and each paper is its own stock.
+       This used to be computed twice in this function — once from currentPrint
+       and again from the selected chip — with the second quietly overwriting
+       the first. One read now.
+
+       An untracked finish reports nothing and the label goes away, rather than
+       showing a number the store never gave. */
+    const sel = this.paperData()[this.state.paper];
     if (this.lbPrintLeftEl) {
-      const sel = this.paperData()[this.state.paper];
-      const left = (sel && typeof sel.left === "number" && sel.left) || (w && !sel ? w.left : 0);
+      const left = (sel && typeof sel.left === "number" && sel.left) || 0;
       this.lbPrintLeftEl.textContent = left ? (left + " left") : "";
       this.lbPrintLeftEl.style.display = left ? "" : "none";
+    }
+    /* The paper line said "Giclée · archival inkjet on fine-art paper" whichever
+       chip was active, so the three finishes described themselves identically.
+       Each carries its own note; print that after the process. */
+    if (this.lbPaperNoteEl) {
+      const note = (sel && sel.note) || "";
+      this.lbPaperNoteEl.textContent = note ? ("Giclée · " + note.charAt(0).toLowerCase() + note.slice(1))
+                                            : "Giclée · archival inkjet on fine-art paper";
     }
   }
 
@@ -2456,6 +2487,7 @@ class Component extends DCLogic {
       lbPrintPrice: el => { this.lbPrintPriceEl = el; this.syncLb(); },
       lbEdition: el => { this.lbEditionEl = el; this.syncLb(); },
       lbPrintLeft: el => { this.lbPrintLeftEl = el; this.syncLb(); },
+      lbPaperNote: el => { this.lbPaperNoteEl = el; this.syncPrint(); },
       lbStrip: el => { this.lbStripEl = el; this.syncLb(); },
       papers: this.paperData().map((p, i) => ({ i, label: p.label, note: p.note, delta: p.inStock ? (p.delta ? "+$" + p.delta : "Included") : "Sold out" })),
       paperMenu: el => { this.paperMenuEl = el; this.syncPrint(); },

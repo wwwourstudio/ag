@@ -446,6 +446,15 @@ function toArtwork(product, info, inventory, names) {
     size: sectionOf(product, info, 'size'),
     year: sectionOf(product, info, 'year'),
     edition: parseInt(sectionOf(product, info, 'edition'), 10) || 0,
+    /* The paper size a print is sold at, per artwork. `size` above is the
+       original's dimensions; this is the print's, and the two differ. Add an
+       info section named `print size` (or `printsize`) in Wix and it shows in
+       the print card where the edition count used to; give one piece its own
+       `print size-night-study-01` and sectionOf prefers it over the shared one,
+       so a single painting can be offered at a different size. */
+    printSize: sectionOf(product, info, 'print size') ||
+               sectionOf(product, info, 'printsize') ||
+               sectionOf(product, info, 'print'),
     collections: collections.length ? collections : ['Works'],
     description: descriptionOf(product),
     price: origPrice,
