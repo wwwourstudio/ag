@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annie Green — Artwork admin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Jost:wght@200;300;400;500&amp;display=swap">
+<style>
+  :root {
+    --ground: #f5f3ef;
+    --card: #ffffff;
+    --ink: #14171a;
+    --muted: rgba(20, 23, 26, .58);
+    --line: rgba(20, 23, 26, .12);
+    --green: #2ea060;
+    --red: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  /* .btn and .field set a display, which beats the hidden attribute's UA
+     rule and left the delete button on screen for a brand new artwork. */
+  [hidden] { display: none !important; }
+  html, body {
+    margin: 0; min-height: 100%; background: var(--ground); color: var(--ink);
+    font-family: 'Jost', system-ui, sans-serif; font-weight: 300;
+    -webkit-text-size-adjust: 100%;
+  }
+  ::selection { background: var(--green); color: var(--ground); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 34px) 80px; }
+
+  header.bar { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .mark { font-size: 21px; letter-spacing: -.038em; }
+  .mark .light { font-weight: 300; }
+  .mark .bold { font-family: 'Archivo Black', 'Jost', sans-serif; font-weight: 900; }
+  .bar h1 { margin: 0; font-size: 11px; font-weight: 400; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+  .bar .spacer { flex: 1; }
+
+  /* One line that always says what the page is actually able to do right
+     now — reading, writing, or neither. It is the first thing to look at
+     when something does not save. */
+  #wire { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  #wire b { font-weight: 500; }
+  #wire.ok b { color: var(--green); }
+  #wire.warn b { color: var(--red); }
+
+  .cols { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: clamp(18px, 2.4vw, 34px); margin-top: 24px; align-items: start; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
+  .panel > h2 {
+    margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line);
+    font-size: 10px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: var(--muted);
+  }
+
+  /* --- the list ------------------------------------------------------- */
+  #list { max-height: 68vh; overflow: auto; }
+  .row {
+    display: flex; gap: 12px; align-items: center; width: 100%; padding: 10px 14px;
+    background: none; border: 0; border-bottom: 1px solid var(--line);
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+  }
+  .row:hover { background: #fbfaf8; }
+  .row[aria-current="true"] { background: #fbfaf8; box-shadow: inset 3px 0 0 var(--ink); }
+  .row img { width: 44px; height: 44px; object-fit: cover; background: #eceae5; flex: none; }
+  .row .t { min-width: 0; }
+  .row .t strong { display: block; font-weight: 400; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .t span { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+  .empty { padding: 18px; font-size: 13px; color: var(--muted); }
+
+  /* --- the form ------------------------------------------------------- */
+  form { padding: 18px clamp(14px, 1.8vw, 22px) 22px; }
+  fieldset { margin: 0 0 20px; padding: 0; border: 0; }
+  fieldset > legend {
+    padding: 0 0 10px; font-size: 10px; font-weight: 500; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  input, textarea, select {
+    width: 100%; padding: 9px 11px; background: var(--ground); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 3px;
+    font: inherit; font-size: 14px; font-weight: 300;
+  }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+  textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+  input:invalid { border-color: var(--red); }
+
+  .preview { display: flex; gap: 14px; align-items: flex-start; }
+  .preview img { width: 108px; height: 108px; object-fit: cover; background: #eceae5; border: 1px solid var(--line); flex: none; }
+  .preview .field { flex: 1; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 22px;
+    border: 1px solid var(--ink); border-radius: 999px; background: transparent; color: var(--ink);
+    font: inherit; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; cursor: pointer;
+    transition: background .2s ease, color .2s ease, opacity .2s ease;
+  }
+  .btn:hover { background: var(--ink); color: var(--ground); }
+  .btn.primary { background: var(--ink); color: var(--ground); }
+  .btn.primary:hover { background: #2a2d33; }
+  .btn.danger { border-color: var(--red); color: var(--red); }
+  .btn.danger:hover { background: var(--red); color: #fff; }
+  .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  .btn.ghost { border-color: var(--line); color: var(--muted); }
+  .btn.ghost:hover { background: var(--line); color: var(--ink); }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .actions .spacer { flex: 1; }
+
+  #say { font-size: 12px; letter-spacing: .04em; min-height: 17px; }
+  #say.ok { color: var(--green); }
+  #say.bad { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <span class="mark"><span class="light">Annie </span><span class="bold">Green</span></span>
+    <h1>Artwork admin</h1>
+    <span class="spacer"></span>
+    <span id="wire">Reading the store…</span>
+  </header>
+
+  <div class="cols">
+
+    <section class="panel">
+      <h2>Catalog <span id="count"></span></h2>
+      <div id="list"><p class="empty">Reading the store…</p></div>
+      <div style="padding: 14px;">
+        <button type="button" class="btn" id="new" style="width: 100%;">New artwork</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 id="formHead">New artwork</h2>
+      <form id="form" autocomplete="off">
+
+        <fieldset>
+          <legend>The piece</legend>
+          <div class="grid">
+            <div class="field wide">
+              <label for="f-title">Title</label>
+              <input id="f-title" name="title" required maxlength="120" placeholder="Night Study 01">
+            </div>
+            <div class="field wide">
+              <label for="f-description">Description</label>
+              <textarea id="f-description" name="description" maxlength="2000"
+                        placeholder="The paragraph that runs beside the piece in the lightbox."></textarea>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Image</legend>
+          <div class="preview">
+            <img id="f-thumb" alt="">
+            <div class="field">
+              <label for="f-image">Main image URL</label>
+              <input id="f-image" name="image" type="url" placeholder="https://static.wixstatic.com/media/…">
+              <p class="hint">
+                Paste the media URL from the Wix media manager. The gallery drops any
+                artwork with no main image, so a piece saved without one will not hang
+                on the wall until it has one. Uploading a file from here is not wired
+                up — the upload has to happen in Wix.
+              </p>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Caption</legend>
+          <p class="hint" style="margin: -4px 0 12px;">
+            These four become the artwork's info sections, which is where the gallery
+            reads its caption from. Leave one empty and that line simply doesn't show.
+          </p>
+          <div class="grid">
+            <div class="field">
+              <label for="f-medium">Medium</label>
+              <input id="f-medium" name="medium" placeholder="Oil on linen">
+            </div>
+            <div class="field">
+              <label for="f-size">Size</label>
+              <input id="f-size" name="size" placeholder="60 × 80 cm">
+            </div>
+            <div class="field">
+              <label for="f-year">Year</label>
+              <input id="f-year" name="year" placeholder="2025">
+            </div>
+            <div class="field">
+              <label for="f-edition">Edition</label>
+              <input id="f-edition" name="edition" type="number" min="0" step="1" placeholder="25">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Collections</legend>
+          <div class="grid">
+            <div class="field wide">
+              <label for="f-collections">Collections, comma separated</label>
+              <input id="f-collections" name="collections" placeholder="Nocturnes, Studies">
+              <p class="hint">
+                The Collections menu is built from whatever collections the products are
+                actually in, so a name typed here that doesn't exist yet has to be
+                created in Wix before it can hold anything.
+                <span id="knownWrap" hidden>Currently in the store: <span id="known"></span>.</span>
+              </p>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Original</legend>
+          <div class="grid">
+            <div class="field">
+              <label for="f-price">Price, USD</label>
+              <input id="f-price" name="price" type="number" min="0" step="1" placeholder="2400">
+            </div>
+            <div class="field">
+              <label for="f-inStock">Availability</label>
+              <select id="f-inStock" name="inStock">
+                <option value="true">For sale</option>
+                <option value="false">Sold</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Prints</legend>
+          <p class="hint" style="margin: -4px 0 12px;">
+            One price per paper finish. Leave both empty for a piece sold as the
+            original only — the lightbox then shows no print row at all.
+          </p>
+          <div class="grid">
+            <div class="field">
+              <label for="f-printSize">Print size</label>
+              <input id="f-printSize" name="printSize" placeholder="A2, 42 × 59.4 cm">
+            </div>
+            <div class="field">
+              <label for="f-printMatte">Matte, USD</label>
+              <input id="f-printMatte" name="printMatte" type="number" min="0" step="1" placeholder="180">
+            </div>
+            <div class="field">
+              <label for="f-printGloss">Gloss, USD</label>
+              <input id="f-printGloss" name="printGloss" type="number" min="0" step="1" placeholder="180">
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" class="btn primary" id="save">Save artwork</button>
+          <button type="button" class="btn ghost" id="reset">Discard changes</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn danger" id="del" hidden>Delete</button>
+        </div>
+        <p id="say"></p>
+
+      </form>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* Artwork admin — the form half.
+ *
+ * Reading is done here, in the browser, with the same anonymous Wix Headless
+ * visitor token the gallery uses (see AGStore in index.html). That token is
+ * read-only by design, so this page CANNOT write to the catalog itself, and
+ * no key that could is going anywhere near a static page on Vercel.
+ *
+ * Saving and deleting therefore go out over postMessage to the Wix page this
+ * is embedded in, which is the only side of the wire holding elevated
+ * permissions — the same arrangement add-to-cart already uses. Standalone, or
+ * embedded in a page whose code isn't listening, the form fills in and reads
+ * fine and every write says plainly that nothing was written. It does not
+ * pretend to have saved.
+ *
+ * The wire, in both directions:
+ *
+ *   → { type: "adminSave",   draft: {…}, productId: <id|null>, nonce }
+ *   → { type: "adminDelete", productId: <id>, nonce }
+ *   ← { type: "adminResult", nonce, ok: true,  productId }
+ *   ← { type: "adminResult", nonce, ok: false, error: "…" }
+ */
+(function () {
+  var CLIENT_ID = "ffe5a2fc-7aa9-42ad-95f8-0d4566f65031";
+  var API = "https://www.wixapis.com";
+  var IMG = "/v1/fit/w_400,h_400,q_80/file.jpg";
+  var ALL_PRODUCTS = "all products";
+  var REPLY_MS = 8000;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var catalog = [];
+  var collections = [];
+  var current = null;      /* the product being edited, or null for a new one */
+  var armed = null;        /* the id whose delete button is one click from firing */
+
+  /* --- reading -------------------------------------------------------- */
+
+  function post(path, token, body) {
+    var headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = token;
+    return fetch(API + path, {
+      method: "POST", headers: headers, body: JSON.stringify(body || {})
+    }).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          throw new Error(path + " → " + r.status + " " + String(t).slice(0, 200));
+        });
+      }
+      return r.json();
+    });
+  }
+
+  var idOf = function (o) { return o ? (o._id || o.id) : null; };
+  var num = function (v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
+  function thumb(url) {
+    if (!url) return "";
+    return url.indexOf("/v1/") !== -1 ? url : url + IMG;
+  }
+
+  /* Wix rich content flattened to the one line these fields hold. */
+  function richText(doc) {
+    var out = [];
+    (function walk(n) {
+      if (!n) return;
+      if (n.textData && n.textData.text) out.push(n.textData.text);
+      (n.nodes || []).forEach(walk);
+    })({ nodes: (doc && doc.nodes) || [] });
+    return out.join("").trim();
+  }
+
+  function choiceOf(variant, optionName) {
+    var list = variant.optionChoices || variant.choices || [];
+    for (var i = 0; i < list.length; i++) {
+      var names = list[i].optionChoiceNames || list[i] || {};
+      if (names.optionName === optionName) return names.choiceName;
+    }
+    return null;
+  }
+
+  /* A product may carry the shared section ("size") and its own more specific
+     one ("size-night-study-01"); the specific one wins. Same rule as the
+     gallery, so the form shows the caption the wall is actually showing. */
+  function sectionOf(product, info, key) {
+    var want = String(key).toLowerCase();
+    var shared = "";
+    var refs = product.infoSections || [];
+    for (var i = 0; i < refs.length; i++) {
+      var hit = info[idOf(refs[i])];
+      if (!hit) continue;
+      var name = String(hit.name || "").toLowerCase();
+      var title = String(hit.title || "").toLowerCase();
+      if (name === want || title === want) { if (!shared) shared = hit.text; continue; }
+      if (name.split("-")[0] === want) return hit.text;
+    }
+    return shared;
+  }
+
+  function toDraft(product, info, variants, names) {
+    var mine = variants[idOf(product)] || [];
+    var price = 0, inStock = false, prints = {};
+
+    mine.forEach(function (v) {
+      if (v.visible === false) return;
+      var format = choiceOf(v, "Format");
+      var finish = choiceOf(v, "Paper Finish");
+      var amount = num(v.price && v.price.actualPrice && v.price.actualPrice.amount);
+      var stocked = !!(v.inventoryStatus && v.inventoryStatus.inStock);
+      if (format === "Original") {
+        if (!price || stocked) { price = amount; inStock = stocked; }
+      } else if (format === "Print" && finish) {
+        prints[finish] = amount;
+      }
+    });
+
+    var refs = (product.directCategoriesInfo && product.directCategoriesInfo.categories) || [];
+    var media = product.media && product.media.main && product.media.main.image;
+
+    return {
+      id: idOf(product),
+      revision: product.revision,
+      slug: product.slug,
+      title: product.name || "Untitled",
+      description: richText(product.description),
+      image: (media && media.url) || "",
+      medium: sectionOf(product, info, "medium"),
+      size: sectionOf(product, info, "size"),
+      year: sectionOf(product, info, "year"),
+      edition: sectionOf(product, info, "edition"),
+      printSize: sectionOf(product, info, "print size") ||
+                 sectionOf(product, info, "printsize") ||
+                 sectionOf(product, info, "print"),
+      collections: refs.map(function (r) { return names[idOf(r)]; })
+        .filter(function (n) { return n && n.toLowerCase() !== ALL_PRODUCTS; }),
+      price: price,
+      inStock: inStock,
+      printMatte: prints.Matte || 0,
+      printGloss: prints.Gloss || 0
+    };
+  }
+
+  function read() {
+    /* Anonymous visitor token: client id only, no secret involved. */
+    return post("/oauth2/token", null, { clientId: CLIENT_ID, grantType: "anonymous" })
+      .then(function (tok) {
+        var token = tok.access_token;
+        if (!token) throw new Error("no access_token in the token response");
+        /* Products and variants are the artwork. Info sections and category
+           names are labels over it, so losing one costs a caption or a menu
+           entry — never the list. They resolve empty instead of rejecting. */
+        var soft = function (label, p) {
+          return p.catch(function (e) {
+            console.warn("[admin] " + label + " unavailable, continuing without it:",
+                         (e && e.message) || e);
+            return {};
+          });
+        };
+        return Promise.all([
+          post("/stores/v3/products/search", token, {
+            search: { cursorPaging: { limit: 100 } },
+            fields: ["DIRECT_CATEGORIES_INFO", "URL", "DESCRIPTION", "INFO_SECTION"]
+          }),
+          post("/stores/v3/products/query-variants", token, {
+            query: { cursorPaging: { limit: 1000 } }
+          }),
+          soft("info sections", post("/stores/v3/info-sections/query", token, {
+            query: { cursorPaging: { limit: 100 } }
+          })),
+          soft("collection names", post("/categories/v1/categories/search", token, {
+            search: { cursorPaging: { limit: 100 } },
+            treeReference: { appNamespace: "@wix/stores" }
+          }))
+        ]);
+      })
+      .then(function (res) {
+        var byProduct = {};
+        (res[1].variants || []).forEach(function (v) {
+          var pid = (v.productData && v.productData.productId) || v.productId;
+          if (!pid) return;
+          (byProduct[pid] = byProduct[pid] || []).push(v);
+        });
+
+        var info = {};
+        (res[2].infoSections || []).forEach(function (s) {
+          var id = idOf(s);
+          if (id) info[id] = { name: s.uniqueName, title: s.title, text: richText(s.description) };
+        });
+
+        var names = {};
+        collections = [];
+        (res[3].categories || []).forEach(function (c) {
+          var id = idOf(c);
+          if (!id) return;
+          names[id] = c.name;
+          if (c.name && c.name.toLowerCase() !== ALL_PRODUCTS) collections.push(c.name);
+        });
+
+        catalog = (res[0].products || []).map(function (p) {
+          return toDraft(p, info, byProduct, names);
+        });
+        catalog.sort(function (a, b) { return a.title.localeCompare(b.title); });
+      });
+  }
+
+  /* --- the list ------------------------------------------------------- */
+
+  function paint() {
+    var list = $("list");
+    list.textContent = "";
+    $("count").textContent = catalog.length ? "· " + catalog.length : "";
+
+    if (!catalog.length) {
+      var p = document.createElement("p");
+      p.className = "empty";
+      p.textContent = "No products in the store yet.";
+      list.appendChild(p);
+      return;
+    }
+
+    catalog.forEach(function (art) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "row";
+      if (current && current.id === art.id) row.setAttribute("aria-current", "true");
+
+      var img = document.createElement("img");
+      img.src = thumb(art.image);
+      img.alt = "";
+      row.appendChild(img);
+
+      var t = document.createElement("div");
+      t.className = "t";
+      var strong = document.createElement("strong");
+      strong.textContent = art.title;
+      var span = document.createElement("span");
+      var bits = [];
+      if (art.year) bits.push(art.year);
+      bits.push(art.price ? "$" + art.price.toLocaleString("en-US") : "unpriced");
+      if (!art.inStock) bits.push("sold");
+      if (!art.image) bits.push("no image");
+      span.textContent = bits.join(" · ");
+      t.appendChild(strong);
+      t.appendChild(span);
+      row.appendChild(t);
+
+      row.addEventListener("click", function () { edit(art); });
+      list.appendChild(row);
+    });
+
+    var known = $("known");
+    if (collections.length) {
+      known.textContent = collections.join(", ");
+      $("knownWrap").hidden = false;
+    } else {
+      $("knownWrap").hidden = true;
+    }
+  }
+
+  /* --- the form ------------------------------------------------------- */
+
+  var BLANK = {
+    id: null, revision: null, title: "", description: "", image: "",
+    medium: "", size: "", year: "", edition: "", printSize: "",
+    collections: [], price: 0, inStock: true, printMatte: 0, printGloss: 0
+  };
+
+  function fill(art) {
+    $("f-title").value = art.title || "";
+    $("f-description").value = art.description || "";
+    $("f-image").value = art.image || "";
+    $("f-medium").value = art.medium || "";
+    $("f-size").value = art.size || "";
+    $("f-year").value = art.year || "";
+    $("f-edition").value = art.edition || "";
+    $("f-printSize").value = art.printSize || "";
+    $("f-collections").value = (art.collections || []).join(", ");
+    $("f-price").value = art.price || "";
+    $("f-inStock").value = art.inStock ? "true" : "false";
+    $("f-printMatte").value = art.printMatte || "";
+    $("f-printGloss").value = art.printGloss || "";
+    shot();
+  }
+
+  function edit(art) {
+    current = art;
+    disarm();
+    $("formHead").textContent = art.id ? "Editing · " + art.title : "New artwork";
+    $("del").hidden = !art.id;
+    fill(art);
+    say("", "");
+    paint();
+  }
+
+  function shot() {
+    var img = $("f-thumb");
+    var url = $("f-image").value.trim();
+    img.src = url ? thumb(url) : "";
+    img.style.visibility = url ? "visible" : "hidden";
+  }
+
+  function collect() {
+    return {
+      title: $("f-title").value.trim(),
+      description: $("f-description").value.trim(),
+      image: $("f-image").value.trim(),
+      medium: $("f-medium").value.trim(),
+      size: $("f-size").value.trim(),
+      year: $("f-year").value.trim(),
+      edition: $("f-edition").value.trim(),
+      printSize: $("f-printSize").value.trim(),
+      collections: $("f-collections").value.split(",")
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean),
+      price: num($("f-price").value),
+      inStock: $("f-inStock").value === "true",
+      prints: (function () {
+        var p = {};
+        var matte = num($("f-printMatte").value);
+        var gloss = num($("f-printGloss").value);
+        if (matte) p.Matte = matte;
+        if (gloss) p.Gloss = gloss;
+        return p;
+      })()
+    };
+  }
+
+  function say(text, kind) {
+    var el = $("say");
+    el.textContent = text;
+    el.className = kind || "";
+  }
+
+  /* --- the write wire ------------------------------------------------- */
+
+  var parentFrame = window.parent !== window;
+  var waiting = {};
+
+  function wire(state, text, emphasis) {
+    var el = $("wire");
+    el.className = state || "";
+    el.textContent = text;
+    if (emphasis) {
+      var b = document.createElement("b");
+      b.textContent = emphasis;
+      el.appendChild(b);
+    }
+  }
+
+  function send(message, onDone) {
+    if (!parentFrame) {
+      onDone(false, "This page isn't embedded in the Wix site, so there is nothing " +
+                    "here that can write to the catalog. Nothing was saved.");
+      return;
+    }
+    var nonce = String(Date.now()) + "." + Math.random().toString(36).slice(2);
+    message.nonce = nonce;
+    waiting[nonce] = onDone;
+    try {
+      window.parent.postMessage(message, "*");
+    } catch (e) {
+      delete waiting[nonce];
+      onDone(false, "postMessage to the Wix page failed: " + ((e && e.message) || e));
+      return;
+    }
+    /* Silence means the Wix page code isn't handling admin messages — the
+       same reason nothing would come back from add-to-cart. Say so rather
+       than leaving a button spinning on a promise nobody made. */
+    setTimeout(function () {
+      if (!waiting[nonce]) return;
+      delete waiting[nonce];
+      onDone(false, "No answer from the Wix page after " + (REPLY_MS / 1000) +
+                    "s. Its page code isn't handling admin messages, so nothing " +
+                    "was written.");
+    }, REPLY_MS);
+  }
+
+  window.addEventListener("message", function (e) {
+    var m = e && e.data;
+    if (!m || m.type !== "adminResult") return;
+    var done = waiting[m.nonce];
+    if (!done) return;               /* late, or somebody else's reply */
+    delete waiting[m.nonce];
+    done(!!m.ok, m.error || "", m.productId || null);
+  });
+
+  /* --- actions -------------------------------------------------------- */
+
+  function busy(on) {
+    $("save").disabled = on;
+    $("del").disabled = on;
+    $("new").disabled = on;
+  }
+
+  function refresh() {
+    return read().then(function () {
+      if (current && current.id) {
+        var again = catalog.filter(function (a) { return a.id === current.id; })[0];
+        current = again || Object.assign({}, BLANK);
+        if (again) fill(again); else edit(current);
+      }
+      paint();
+    }).catch(function (e) {
+      console.error("[admin] re-reading the store failed:", e);
+    });
+  }
+
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var draft = collect();
+    if (!draft.title) { say("A piece needs a title.", "bad"); return; }
+    busy(true);
+    say("Saving…", "");
+    send({ type: "adminSave", draft: draft, productId: current && current.id },
+      function (ok, error) {
+        busy(false);
+        if (!ok) { say(error, "bad"); return; }
+        say("Saved.", "ok");
+        refresh();
+      });
+  });
+
+  function disarm() {
+    armed = null;
+    var b = $("del");
+    b.textContent = "Delete";
+    b.classList.remove("primary");
+  }
+
+  /* Deleting a product is not undoable from here, so the first click only
+     arms the button and the second one means it. */
+  $("del").addEventListener("click", function () {
+    if (!current || !current.id) return;
+    if (armed !== current.id) {
+      armed = current.id;
+      $("del").textContent = "Delete for good?";
+      say("Deleting removes the product from the store, and the gallery with it.", "bad");
+      return;
+    }
+    var gone = current.id;
+    disarm();
+    busy(true);
+    say("Deleting…", "");
+    send({ type: "adminDelete", productId: gone }, function (ok, error) {
+      busy(false);
+      if (!ok) { say(error, "bad"); return; }
+      catalog = catalog.filter(function (a) { return a.id !== gone; });
+      edit(Object.assign({}, BLANK));
+      say("Deleted.", "ok");
+      refresh();
+    });
+  });
+
+  $("new").addEventListener("click", function () { edit(Object.assign({}, BLANK)); });
+  $("reset").addEventListener("click", function () {
+    disarm();
+    fill(current || BLANK);
+    say("", "");
+  });
+  $("f-image").addEventListener("input", shot);
+  $("f-title").addEventListener("input", disarm);
+
+  /* --- boot ----------------------------------------------------------- */
+
+  edit(Object.assign({}, BLANK));
+
+  /* Being in a frame is the most this side can honestly claim: whether the
+     page code on the other side actually handles admin messages is only
+     known once one is answered, which is why a save that goes unanswered
+     says so in full rather than being second-guessed here. */
+  wire("", "Reading the store…");
+
+  read().then(function () {
+    paint();
+    if (parentFrame) wire("ok", "Embedded · writes go to ", "the Wix page");
+    else wire("warn", "Standalone · ", "read only");
+  }).catch(function (e) {
+    console.error("[admin] reading the store failed:", e);
+    var list = $("list");
+    list.textContent = "";
+    var p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Could not read the store: " + ((e && e.message) || e);
+    list.appendChild(p);
+    wire("warn", "Store unreachable · ", "see console");
+  });
+})();
+</script>
+</body>
+</html>
