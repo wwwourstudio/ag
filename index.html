@@ -441,6 +441,9 @@
     a:hover { color: #2ea060; }
     ::selection { background: #2ea060; color: #f5f3ef; }
     @keyframes softIn { from { opacity: 0; } to { opacity: 1; } }
+    /* The carousel scrolls but does not show a bar — the snap points and the
+       partial fourth tile are the affordance. */
+    [data-lb-strip]::-webkit-scrollbar { display: none; }
     @keyframes glowDrift { 0% { transform: scale(1) translate(0,0); } 50% { transform: scale(1.1) translate(1.6%,-1.4%); } 100% { transform: scale(1) translate(0,0); } }
     @keyframes wipeUp { from { clip-path: inset(108% 0 0 0); transform: translateY(26px); } to { clip-path: inset(-36% 0 0 0); transform: translateY(0); } }
     @keyframes meterIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
@@ -595,7 +598,7 @@
       [data-lb-strip] {
         position: static !important;
         padding: 4px clamp(16px, 5vw, 28px) calc(24px + var(--ag-cut, 0px)) !important;
-        background: none !important;
+        background: #ffffff !important;
       }
     }
 
@@ -627,7 +630,6 @@
       [data-lb-titlewrap] { margin-top: 10px !important; }
       [data-lb-artist] { margin-top: 8px !important; }
       [data-lb-specs] { margin-top: 12px !important; }
-      [data-lb-tail] { height: 8px !important; }
     }
   </style>
   <template id="__bundler_thumbnail">
@@ -760,8 +762,8 @@
   </div>
 
   <sc-if value="{{ lbOpen }}" hint-placeholder-val="{{ false }}">
-    <div data-lb-overlay="1" style="position: fixed; inset: 0; z-index: 8000; background: #efece6; animation: softIn .32s ease both;">
-      <div style="position: absolute; inset: 0; background: radial-gradient(64% 52% at 34% 20%, rgba(255,255,255,.9) 0%, transparent 70%), radial-gradient(46% 42% at 84% 78%, rgba(214,52,132,.1) 0%, transparent 72%);"></div>
+    <div data-lb-overlay="1" style="position: fixed; inset: 0; z-index: 8000; background: #ffffff; animation: softIn .32s ease both;">
+      <div style="position: absolute; inset: 0; background: radial-gradient(64% 52% at 34% 20%, rgba(255,255,255,.96) 0%, transparent 72%);"></div>
 
       <div data-lb-grid="1" style="position: absolute; inset: 0; display: grid; grid-template-columns: clamp(300px, 28vw, 420px) minmax(0,1fr); align-items: stretch;">
         <div data-lb-view="1" style="position: relative; display: grid; place-items: center; min-width: 0; padding: clamp(58px, 9vh, 96px) clamp(20px, 4vw, 56px) calc(clamp(112px, 16vh, 156px) + var(--ag-cut, 0px));">
@@ -789,13 +791,13 @@
           <button onClick="{{ lbNext }}" aria-label="Next work" style="position: absolute; z-index: 2; top: 50%; right: clamp(10px, 2.4vw, 34px); transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; appearance: none; width: 52px; height: 52px; border-radius: 50%; border: 0; background: transparent; color: rgba(20,23,26,.7); cursor: pointer; transition: background .35s ease, color .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);" style-hover="background: conic-gradient(from 0deg at 50% 50%, #ffd6e8 0deg, #d9f2ff 52deg, #d8ffe4 104deg, #fff6cf 156deg, #ffd9f4 208deg, #d5e4ff 260deg, #ccfff2 312deg, #ffd6e8 360deg); color: #14171a; transform: translateY(-50%) scale(1.1);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5l7 7-7 7"></path></svg></button>
         </div>
 
-        <aside data-lb-side="1" onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) var(--ag-cut, 0px); background: rgba(255,255,255,.55); border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
+        <aside data-lb-side="1" onMouseEnter="{{ titleScroll }}" onMouseLeave="{{ titleReset }}" style="position: relative; order: -1; display: flex; flex-direction: column; padding: clamp(22px, 3vh, 34px) clamp(22px, 2.4vw, 36px) var(--ag-cut, 0px); background: #ffffff; border-right: 1px solid rgba(20,23,26,.08); overflow: auto;">
           <div style="display: flex; align-items: baseline; gap: 12px;">
             <span ref="{{ lbCollection }}" style="font-size: 9px; letter-spacing: .24em; text-transform: uppercase; color: #2ea060;"></span>
           </div>
           <div data-lb-titlewrap="1" ref="{{ lbTitleWrap }}" style="position: relative; margin-top: 16px; overflow: hidden; flex: none;">
             <div data-lb-title="1" ref="{{ lbTitle }}" style="font-weight: 200; font-size: clamp(26px, 2.5vw, 38px); line-height: 1.12; letter-spacing: .012em; text-transform: uppercase; color: #14171a; white-space: nowrap; will-change: transform; transition: transform 4s linear;"></div>
-            <span ref="{{ lbTitleFade }}" style="position: absolute; top: 0; right: 0; bottom: 0; width: 46px; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(250,249,246,0) 0%, rgba(250,249,246,.95) 100%); transition: opacity .3s ease;"></span>
+            <span ref="{{ lbTitleFade }}" style="position: absolute; top: 0; right: 0; bottom: 0; width: 46px; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.95) 100%); transition: opacity .3s ease;"></span>
           </div>
           <div data-lb-artist="1" style="margin-top: 12px; display: flex; align-items: baseline; gap: .1em; text-transform: uppercase; line-height: .9; color: #14171a;">
             <span style="font-weight: 200; font-size: 15px; letter-spacing: .02em;">Annie</span>
@@ -852,18 +854,17 @@
 
             <a ref="{{ lbPrintBtn }}" href="{{ printLink }}" style="display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid #14171a; background: transparent; color: #14171a; text-decoration: none; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; transition: background .25s ease, color .25s ease;" style-hover="background: #14171a; color: #f5f3ef; border-color: #14171a;">Buy print</a>
           </div>
-
-          <div data-lb-tail="1" style="flex: none; height: clamp(26px, 4vh, 40px);"></div>
-          <span style="position: sticky; bottom: 0; flex: none; height: 28px; margin: -28px 0 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(252,251,248,.92) 100%);"></span>
         </aside>
       </div>
 
-      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; overflow-x: visible; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, rgba(239,236,230,.96) 42%);">
+      <div data-lb-strip="1" ref="{{ lbStrip }}" onClick="{{ lbPick }}" style="position: absolute; left: clamp(300px, 28vw, 420px); right: 0; bottom: var(--ag-cut, 0px); z-index: 2; transition: bottom .25s ease; max-width: 432px; margin-inline: auto; display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 24px) / 3); gap: 12px; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 16px clamp(16px, 3vw, 34px) max(16px, env(safe-area-inset-bottom)); background: #ffffff;">
         <sc-for list="{{ works }}" as="w" hint-placeholder-count="24">
-          <!-- Fixed square tiles: every artwork gets the same footprint, whatever
-               its own proportions, so the strip reads as one row of equals
-               rather than a ragged line of different heights. -->
-          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0; width: clamp(58px, 5.6vw, 84px); height: clamp(58px, 5.6vw, 84px); border-radius: 3px; overflow: hidden;">
+          <!-- Three across, always. The tile takes a third of the strip's width
+               and squares itself, so every artwork gets the same footprint at
+               any window size and the fourth begins the scroll. Snapping is on
+               the tile, so the carousel comes to rest on a whole thumbnail
+               rather than halfway through one. -->
+          <button data-thumb="{{ w.i }}" style="flex: none; appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent; line-height: 0; width: 100%; aspect-ratio: 1 / 1; border-radius: 3px; overflow: hidden; scroll-snap-align: start;">
             <img data-src="{{ w.src }}" alt="" style="display: block; width: 100%; height: 100%; object-fit: cover; opacity: .4; filter: grayscale(.45); transition: opacity .3s ease, filter .3s ease, transform .3s ease;">
           </button>
         </sc-for>
