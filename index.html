@@ -551,7 +551,20 @@
     /* On a phone the right edge is where the thumb sits and where the system
        back gesture lives, so the close moves to the left. */
     @media (max-width: 620px) {
-      [data-lb-close] { right: auto !important; left: clamp(12px, 3vw, 20px) !important; }
+      /* Left, away from the thumb and the system back gesture — and big enough
+         to hit: 34px is under the 44px touch target every mobile guideline
+         asks for, and at 38% opacity on white it read as a stray mark rather
+         than a control. A soft chip gives it an edge to aim at. */
+      [data-lb-close] {
+        right: auto !important;
+        left: clamp(12px, 3vw, 20px) !important;
+        width: 44px !important;
+        height: 44px !important;
+        color: rgba(20,23,26,.66) !important;
+        background: rgba(20,23,26,.055) !important;
+        box-shadow: inset 0 0 0 1px rgba(20,23,26,.09) !important;
+      }
+      [data-lb-close] svg { width: 17px !important; height: 17px !important; }
     }
     @media (max-width: 820px) {
       /* The whole lightbox scrolls as one page — artwork, details and both
@@ -585,9 +598,15 @@
       /* The Wix header floats over the top of the frame on a phone — its
          menu icon sits in the first ~70px — and the framed artwork was
          reaching right up under it. Start the artwork below that. */
+      /* The top padding was 88-124px, reserved for a Wix header that floats
+         over the frame — but it was cleared with far more room than the header
+         needs, so the artwork sat in a deep empty band with the close button
+         stranded in it. Halved. The bottom went the other way: 12px left the
+         piece almost touching the panel below it, so it now gets real space
+         under it and the artwork sits in the middle of its own column. */
       [data-lb-view] {
         order: 0 !important;
-        padding: clamp(88px, 13vh, 124px) 16px 12px !important;
+        padding: clamp(52px, 7vh, 72px) 16px clamp(26px, 4vh, 40px) !important;
       }
       [data-lb-img] {
         max-width: min(88vw, 520px) !important;
@@ -787,7 +806,7 @@
                whole time you were looking at it. The X below says the same
                thing once, quietly, in a corner. -->
           <div onClick="{{ closeTile }}" style="position: absolute; inset: 0; z-index: 0; cursor: zoom-out;"></div>
-          <button data-lb-close="1" onClick="{{ closeTile }}" aria-label="Close" style="position: absolute; z-index: 3; top: clamp(14px, 2.2vh, 26px); right: clamp(14px, 2.2vw, 28px); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; appearance: none; border: 0; border-radius: 50%; background: transparent; color: rgba(20,23,26,.38); cursor: pointer; transition: color .25s ease, background .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);" style-hover="color: #14171a; background: rgba(20,23,26,.06); transform: rotate(90deg);">
+          <button data-lb-close="1" onClick="{{ closeTile }}" aria-label="Close" style="position: absolute; z-index: 3; top: clamp(14px, 2.2vh, 26px); right: clamp(14px, 2.2vw, 28px); display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; appearance: none; border: 0; border-radius: 50%; background: transparent; color: rgba(20,23,26,.5); cursor: pointer; transition: color .25s ease, background .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);" style-hover="color: #14171a; background: rgba(20,23,26,.06); transform: rotate(90deg);">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
           </button>
           <div style="position: absolute; top: 0; left: 50%; width: min(900px, 86%); height: 44%; transform: translateX(-50%); background: radial-gradient(56% 100% at 50% 0%, rgba(255,255,255,.9) 0%, transparent 74%); pointer-events: none;"></div>
